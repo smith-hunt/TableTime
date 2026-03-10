@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/main_layout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:fitsSystemWindows="true"
+    android:background="#F5F7FA"> <RelativeLayout
+    android:id="@+id/top_bar"
+    android:layout_width="match_parent"
+    android:layout_height="56dp"
+    android:background="#FFFFFF"
+    android:elevation="4dp"
+    android:paddingHorizontal="16dp">
+
+    <TextView
+        android:id="@+id/tv_top_week"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentStart="true"
+        android:layout_centerVertical="true"
+        android:text="第 1 周"
+        android:textSize="14sp"
+        android:textColor="#1A237E"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tv_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerInParent="true"
+        android:text="我的课表"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="#263238" />
+
+    <ImageButton
+        android:id="@+id/btn_plus_menu"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_alignParentEnd="true"
+        android:layout_centerVertical="true"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:src="@android:drawable/ic_input_add"
+        app:tint="#1A237E"
+        android:contentDescription="更多操作" />
+</RelativeLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <androidx.viewpager2.widget.ViewPager2
+            android:id="@+id/week_viewpager"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="visible" />
+
+        <ScrollView
+            android:id="@+id/exam_page"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:visibility="gone"
+            android:background="#FFFFFF">
+            <TextView
+                android:id="@+id/tv_exam_content"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:padding="20dp"
+                android:lineSpacingExtra="6dp"
+                android:text="暂无考试安排信息"
+                android:textColor="#546E7A"
+                android:textSize="15sp" />
+        </ScrollView>
+
+        <LinearLayout
+            android:id="@+id/grade_page"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="10dp"
+                android:background="#FFFFFF">
+
+                <Button android:id="@+id/btn_all_grades"
+                    android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1"
+                    android:text="全部成绩" android:textSize="12sp" android:layout_margin="4dp"
+                    android:backgroundTint="#2196F3" android:textColor="#FFFFFF"
+                    style="@style/Widget.MaterialComponents.Button"/>
+
+                <Button android:id="@+id/btn_ranking"
+                    android:layout_width="0dp" android:layout_height="42dp" android:layout_weight="1"
+                    android:text="排名统计" android:textSize="12sp" android:layout_margin="4dp"
+                    android:backgroundTint="#2196F3" android:textColor="#FFFFFF"
+                    style="@style/Widget.MaterialComponents.Button"/>
+            </LinearLayout>
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:fillViewport="true">
+                <LinearLayout
+                    android:id="@+id/grade_container"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:animateLayoutChanges="true" />
+            </ScrollView>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/credit_page"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:padding="12dp"
+                android:background="#FFFFFF"
+                android:elevation="2dp">
+
+                <Button android:id="@+id/btn_my_credits"
+                    android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1"
+                    android:text="学业进度" android:textSize="13sp" android:layout_margin="4dp"
+                    android:backgroundTint="#E8EAF6" android:textColor="#1A237E"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"/>
+
+                <Button android:id="@+id/btn_training_plan"
+                    android:layout_width="0dp" android:layout_height="44dp" android:layout_weight="1"
+                    android:text="培养方案" android:textSize="13sp" android:layout_margin="4dp"
+                    android:backgroundTint="#E8EAF6" android:textColor="#1A237E"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"/>
+            </LinearLayout>
+
+            <EditText
+                android:id="@+id/et_plan_search"
+                android:layout_width="match_parent"
+                android:layout_height="46dp"
+                android:layout_marginHorizontal="16dp"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="8dp"
+                android:background="@drawable/shape_search_bg"
+                android:hint="🔍 输入课程名称快速检索..."
+                android:paddingHorizontal="16dp"
+                android:textSize="14sp"
+                android:singleLine="true"
+                android:visibility="gone" />
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:fillViewport="true">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp"
+                    android:animateLayoutChanges="true">
+
+                    <TextView
+                        android:id="@+id/tv_credit_content"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:paddingTop="8dp"
+                        android:layout_marginBottom="12dp"
+                        android:textColor="#90A4AE"
+                        android:textSize="14sp"
+                        android:text="请选择上方项目开始查询" />
+
+                    <LinearLayout
+                        android:id="@+id/plan_container"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical" />
+                </LinearLayout>
+            </ScrollView>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/account_page"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:background="#FFFFFF"
+            android:visibility="gone"
+            android:padding="24dp">
+
+            <ImageView
+                android:layout_width="80dp"
+                android:layout_height="80dp"
+                android:layout_gravity="center"
+                android:layout_marginTop="40dp"
+                android:src="@android:drawable/ic_menu_myplaces"
+                app:tint="#1A237E" />
+
+            <TextView
+                android:id="@+id/tv_account_display"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_marginTop="16dp"
+                android:text="状态: 未登录"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="#263238" />
+
+            <View android:layout_width="match_parent" android:layout_height="1dp"
+                android:background="#ECEFF1" android:layout_marginVertical="32dp" />
+
+            <LinearLayout
+                android:id="@+id/layout_login_form"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <EditText android:id="@+id/et_student_id"
+                    android:layout_width="match_parent" android:layout_height="50dp"
+                    android:hint="学号" android:textSize="15sp" android:paddingHorizontal="12dp"
+                    android:background="@android:drawable/editbox_background"/>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    app:passwordToggleEnabled="true"
+                    app:passwordToggleTint="#3F51B5"
+                    style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/et_password"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:hint="密码"
+                        android:inputType="textPassword"
+                        android:textSize="15sp"
+                        android:paddingHorizontal="12dp"
+                        android:background="@null" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <Button android:id="@+id/btn_login"
+                    android:layout_width="match_parent" android:layout_height="54dp"
+                    android:layout_marginTop="24dp" android:text="立即登录"
+                    android:backgroundTint="#3F51B5" android:textColor="#FFFFFF"
+                    app:cornerRadius="8dp"/>
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btn_logout"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="12dp"
+                android:text="退出登录"
+                android:backgroundTint="#FF5252"
+                android:textColor="#FFFFFF"
+                android:visibility="gone"
+                app:cornerRadius="8dp" />
+        </LinearLayout>
+    </FrameLayout>
+
+    <LinearLayout
+        android:id="@+id/bottom_nav"
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="#FFFFFF"
+        android:elevation="12dp"
+        android:orientation="horizontal">
+
+        <LinearLayout android:id="@+id/tab_kb_btn" style="@style/NavTabStyle">
+            <TextView android:id="@+id/tab_kb_text"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="课表" android:textColor="#1A237E" android:textStyle="bold" android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/tab_exam_btn" style="@style/NavTabStyle">
+            <TextView android:id="@+id/tab_exam_text"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="考试" android:textColor="#78909C" android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/tab_grade_btn" style="@style/NavTabStyle">
+            <TextView android:id="@+id/tab_grade_text"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="成绩" android:textColor="#78909C" android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/tab_credit_btn" style="@style/NavTabStyle">
+            <TextView android:id="@+id/tab_credit_text"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="学分" android:textColor="#78909C" android:textSize="12sp" />
+        </LinearLayout>
+
+        <LinearLayout android:id="@+id/tab_account_btn" style="@style/NavTabStyle">
+            <TextView android:id="@+id/tab_account_text"
+                android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="我的" android:textColor="#78909C" android:textSize="12sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</LinearLayout>

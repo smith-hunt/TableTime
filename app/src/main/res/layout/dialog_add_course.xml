@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="20dp">
+    <EditText android:id="@+id/edit_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="课程名称" />
+    <EditText android:id="@+id/edit_day" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="周几 (1-7)" android:inputType="number" />
+    <EditText android:id="@+id/edit_start" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="开始节次" android:inputType="number" />
+    <EditText android:id="@+id/edit_end" android:layout_width="match_parent" android:layout_height="wrap_content" android:hint="结束节次" android:inputType="number" />
+</LinearLayout>
