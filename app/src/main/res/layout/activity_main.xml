@@ -258,6 +258,18 @@
                     android:layout_marginTop="24dp" android:text="立即登录"
                     android:backgroundTint="#3F51B5" android:textColor="#FFFFFF"
                     app:cornerRadius="8dp"/>
+
+                <TextView
+                    android:id="@+id/tv_forgot_password"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:layout_marginTop="16dp"
+                    android:padding="8dp"
+                    android:text="忘记密码？点击这里找回"
+                    android:textColor="#3F51B5"
+                    android:textSize="14sp"
+                    android:background="?attr/selectableItemBackground" />
             </LinearLayout>
 
             <Button

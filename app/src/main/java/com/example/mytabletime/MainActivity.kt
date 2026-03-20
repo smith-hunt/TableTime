@@ -24,13 +24,15 @@ import kotlin.collections.HashMap
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.RelativeLayout
-import android.graphics.drawable.Drawable
-import android.graphics.drawable.ClipDrawable
 import android.content.res.ColorStateList
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import android.content.SharedPreferences
-
+import android.os.Handler
+import android.os.Looper
+import android.widget.GridLayout
+import android.content.Intent
+import android.app.PendingIntent
 
 data class Course(
     var name: String,
@@ -76,6 +78,18 @@ data class CreditCategory(
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var tickHandler: Handler
+    private val tickRunnable = object : Runnable {
+        override fun run() {
+            // 🌟 核心：直接刷通知，不碰 UI 布局
+            refreshNotificationOnly()
+
+            // 🌟 如果你想让 ViewPager 里的课表界面也跟着刷（比如高亮切换）
+            // findViewById<androidx.viewpager2.widget.ViewPager2>(R.id.week_viewpager).adapter?.notifyDataSetChanged()
+
+            tickHandler.postDelayed(this, 60000)
+        }
+    }
     // --- 【100% 照搬你提供的 OkHttpClient，保证登录不报错】 ---
     private val myClient: OkHttpClient = OkHttpClient.Builder()
         .cookieJar(object : CookieJar {
@@ -105,6 +119,51 @@ class MainActivity : AppCompatActivity() {
     private lateinit var pInput: EditText
     private var fullTrainingPlanList = mutableListOf<TrainingPlan>()
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 101) {
+            if (grantResults.isNotEmpty() && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                // 🌟 核心修改：权限一拿到，立刻计算周次并刷新通知
+                calculateCurrentWeek()
+                refreshNotificationOnly()
+                Toast.makeText(this, "通知权限已开启，看板已就绪", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun createNotificationChannel() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            val manager = getSystemService(android.app.NotificationManager::class.java)
+
+            // 🌟 统一使用 v2 标识
+            val channelId = "course_monitor_v99"
+
+            // 建议：如果之前有旧渠道，保留删除逻辑以清理冗余
+            manager?.deleteNotificationChannel("course_monitor")
+
+            val channel = android.app.NotificationChannel(
+                channelId,
+                "课程实时动态",
+                android.app.NotificationManager.IMPORTANCE_HIGH // 🌟 必须是 HIGH 才能在锁屏“蹦”出来
+            ).apply {
+                description = "在锁屏显示当前课程信息"
+
+                // 🌟 核心修改：强制设为 PUBLIC，确保锁屏时不仅仅显示“收到一条新通知”，而是显示课程名字
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PUBLIC
+
+                // 🌟 增强：允许绕过免打扰模式（可选，根据需求决定）
+                setBypassDnd(true)
+
+                // 🌟 增强：确保闪光灯和振动开启，这会提高系统对该渠道的优先级判定
+                enableLights(true)
+                lightColor = android.graphics.Color.BLUE
+                enableVibration(true)
+            }
+
+            manager?.createNotificationChannel(channel)
+        }
+    }
+
     private fun getEncryptedPrefs(): SharedPreferences {
         return try {
             val masterKey = MasterKey.Builder(this)
@@ -122,10 +181,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // 在 MainActivity 中添加这个辅助函数
+    private fun getTimeRange(section: Int): String {
+        return when (section) {
+            1 -> "08:10 - 08:55"
+            2 -> "09:05 - 09:50"
+            3 -> "10:10 - 10:55"
+            4 -> "11:05 - 11:50"
+            5 -> "14:20 - 15:05"
+            6 -> "15:15 - 16:00"
+            7 -> "16:20 - 17:05"
+            8 -> "17:15 - 18:00"
+            9 -> "19:30 - 20:15"
+            10 -> "20:25 - 21:10"
+            else -> ""
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
+        tickHandler = Handler(Looper.getMainLooper())
+        tickHandler.post(tickRunnable)
+        checkNotificationPermission()
         // 1. 解决底部系统导航栏遮挡 UI 问题
         val mainRoot = findViewById<View>(R.id.main_layout)
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(mainRoot) { v, insets ->
@@ -212,6 +291,9 @@ class MainActivity : AppCompatActivity() {
         if (currentWeek in 1..25) {
             viewPager.setCurrentItem(currentWeek - 1, false)
         }
+        // 🌟 核心修复：启动瞬间强制同步左上角周数文字与颜色
+        tvTopWeek.text = "第 ${currentWeek} 周(本周)"
+        tvTopWeek.setTextColor(Color.parseColor("#2196F3")) // 强制变蓝色，保持“本周”的高亮感
 
         // 🌟 核心修改后的代码
         viewPager.registerOnPageChangeCallback(object : androidx.viewpager2.widget.ViewPager2.OnPageChangeCallback() {
@@ -299,13 +381,6 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 绑定底部 5 个 Tab 按钮
-        findViewById<View>(R.id.tab_kb_btn).setOnClickListener { switchTab(0) }
-        findViewById<View>(R.id.tab_exam_btn).setOnClickListener { switchTab(1) }
-        findViewById<View>(R.id.tab_grade_btn).setOnClickListener { switchTab(2) }
-        findViewById<View>(R.id.tab_credit_btn).setOnClickListener { switchTab(3) } // 🌟 新增
-        findViewById<View>(R.id.tab_account_btn).setOnClickListener { switchTab(4) } // 变成 4
-
         // 7. 绑定底部 4 个 Tab 按钮
         findViewById<View>(R.id.tab_kb_btn).setOnClickListener { switchTab(0) }
         findViewById<View>(R.id.tab_exam_btn).setOnClickListener { switchTab(1) }
@@ -373,6 +448,10 @@ class MainActivity : AppCompatActivity() {
                 step1FetchTokens(u, p)
             }
         }
+        val tvForgotPwd = findViewById<TextView>(R.id.tv_forgot_password)
+        tvForgotPwd.setOnClickListener {
+            showForgotPasswordDialog()
+        }
 
         btnPlus.setOnClickListener { view ->
             val popup = PopupMenu(this, view)
@@ -387,6 +466,14 @@ class MainActivity : AppCompatActivity() {
             }
             popup.show()
         }
+
+        // 在 onCreate 结尾
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (fetchedList.isNotEmpty()) {
+                refreshNotificationOnly()
+            }
+        }, 1000) // 延迟1秒，等本地数据 load 完成
+        // 强制发送测试通知，排除逻辑错误
     }
 
     // 💡 把它作为独立的方法放在类里面
@@ -435,59 +522,6 @@ class MainActivity : AppCompatActivity() {
                     findViewById<TextView>(R.id.tv_exam_content).text =
                         if (sb.isEmpty()) "目前没有查询到正考安排。" else sb.toString()
                     updateStatus("考试安排更新成功")
-                }
-            }
-        })
-    }
-
-    private fun fetchCreditOrPlanData(targetUrl: String, loadingMsg: String) {
-        val tvContent = findViewById<TextView>(R.id.tv_credit_content)
-        tvContent.text = loadingMsg
-        updateStatus(loadingMsg)
-
-        val request = Request.Builder()
-            .url(targetUrl)
-            // 教务处通常需要一个主页的 Referer 防盗链
-            .addHeader("Referer", "https://jiaowu.sicau.edu.cn/jiaoshi/bangong/index1.asp")
-            .build()
-
-        myClient.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                runOnUiThread { tvContent.text = "网络连接失败，请检查是否已连接校园网或VPN" }
-            }
-
-            override fun onResponse(call: Call, response: Response) {
-                val html = decodeGb2312(response)
-                val doc = Jsoup.parse(html)
-
-                // 寻找页面里最大的表格（教务处的排版一般核心数据都在最后一个 table 里）
-                val tables = doc.select("table")
-                if (tables.isEmpty()) {
-                    runOnUiThread { tvContent.text = "解析失败：未找到数据表格，可能登录已过期" }
-                    return
-                }
-
-                val targetTable = tables.last()
-                val rows = targetTable?.select("tr") ?: return
-
-                val sb = StringBuilder()
-                for (row in rows) {
-                    val cols = row.select("td, th") // 提取表格的单元格或表头
-                    val rowText = cols.joinToString("  |  ") { it.text().trim() }
-
-                    if (rowText.isNotBlank()) {
-                        sb.append(rowText).append("\n")
-                        sb.append("--------------------------------------------------\n")
-                    }
-                }
-
-                runOnUiThread {
-                    if (sb.isEmpty()) {
-                        tvContent.text = "暂无数据"
-                    } else {
-                        tvContent.text = sb.toString()
-                        updateStatus("数据拉取成功")
-                    }
                 }
             }
         })
@@ -975,27 +1009,6 @@ class MainActivity : AppCompatActivity() {
             card.addView(tvData)
             container.addView(card)
         }
-    }
-
-    // 一个简单的辅助函数，让进度条颜色更智能
-    private fun createProgressDrawable(progress: Double): Drawable {
-        val color = when {
-            progress >= 100.0 -> "#4CAF50" // 绿色
-            progress >= 60.0 -> "#2196F3"  // 蓝色
-            else -> "#FF9800"             // 橙色
-        }
-        val pgDrawable = GradientDrawable().apply {
-            cornerRadius = 10f
-            setColor(Color.parseColor(color))
-        }
-        val bgDrawable = GradientDrawable().apply {
-            cornerRadius = 10f
-            setColor(Color.parseColor("#E0E0E0"))
-        }
-        return ClipDrawable(pgDrawable, Gravity.START, ClipDrawable.HORIZONTAL).apply {
-            // 这里逻辑较复杂，建议简单使用颜色或 LayerDrawable
-        }
-        // 简单起见，可以直接用系统的颜色过滤
     }
 
     private fun showSemesterQueryDialog() {
@@ -1634,49 +1647,117 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 2. 侧边 1-10 节次
+        // 2. 侧边 1-10 节次（增加具体时间段显示）
+        val timeSlots = mapOf(
+            1 to "08:10\n08:55",
+            2 to "09:05\n09:50",
+            3 to "10:10\n10:55",
+            4 to "11:05\n11:50",
+            5 to "14:20\n15:05",
+            6 to "15:15\n16:00",
+            7 to "16:20\n17:05",
+            8 to "17:15\n18:00",
+            9 to "19:30\n20:15",
+            10 to "20:25\n21:10"
+        )
+
         for (i in 1..10) {
-            val tv = TextView(this)
-            tv.text = "$i"
-            tv.gravity = Gravity.CENTER
+            val wrapper = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+            }
+
+            // 上方的节次数字
+            val tvIndex = TextView(this).apply {
+                text = "$i"
+                textSize = 14f
+                setTextColor(Color.BLACK)
+                setTypeface(null, android.graphics.Typeface.BOLD)
+                gravity = Gravity.CENTER
+            }
+
+            // 下方的具体时间段
+            val tvTime = TextView(this).apply {
+                text = timeSlots[i]
+                textSize = 9f
+                setTextColor(Color.GRAY) // 🌟 灰色表示
+                gravity = Gravity.CENTER
+                setLineSpacing(0f, 0.8f) // 紧凑一点
+            }
+
+            wrapper.addView(tvIndex)
+            wrapper.addView(tvTime)
+
             val lp = GridLayout.LayoutParams(GridLayout.spec(i), GridLayout.spec(0))
             lp.width = labelW
             lp.height = cellH
-            tv.layoutParams = lp
-            grid.addView(tv)
+            wrapper.layoutParams = lp
+            grid.addView(wrapper)
         }
 
         // 3. 占用矩阵与画课
         val occupied = Array(11) { BooleanArray(8) }
-        val colorPairs = arrayOf(Pair("#E8F5E9", "#2E7D32"), Pair("#E3F2FD", "#1565C0"), Pair("#FFF3E0", "#EF6C00"), Pair("#F3E5F5", "#7B1FA2"), Pair("#FCE4EC", "#C2185B"))
+
         val all = fetchedList + manualList
         for (c in all) {
+            // 1. 过滤与占用标记
             if (!c.weekList.contains(weekIdx) || c.startSection > 10 || c.day > 7) continue
-            for (r in c.startSection..c.endSection) { if (r <= 10) occupied[r][c.day] = true }
+            for (r in c.startSection..c.endSection) {
+                if (r <= 10) occupied[r][c.day] = true
+            }
+
             val card = TextView(this)
             val sn = if (c.name.length > 8) c.name.take(7) + ".." else c.name
             card.text = "${sn}\n@${c.room}"
-            val pair = colorPairs[Math.abs(c.name.hashCode()) % colorPairs.size]
-            card.setTextColor(Color.parseColor(pair.second))
+
+            // ———————————————— 🌟 核心改进：黄金分割颜色算法 ————————————————
+            // 使用课程名作为随机数种子，确保同一门课颜色固定，不同课颜色随机
+            val seed = c.name.hashCode().toLong()
+            val random = java.util.Random(seed)
+
+            // 1. 随机色相 (0-360)
+            val hue = random.nextInt(360).toFloat()
+            // 2. 这里的饱和度和亮度手动固定，保证“多巴胺”浅色质感
+            val saturation = 0.5f
+            val lightness = 0.9f
+
+            // 转换颜色
+            val bgInt = androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, saturation, lightness))
+            val textInt = androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, saturation, 0.25f))
+
+            card.setTextColor(textInt)
             card.textSize = 11f
             card.setTypeface(null, android.graphics.Typeface.BOLD)
             card.gravity = Gravity.CENTER
-            card.setPadding(4, 4, 4, 4)
-            val shape = GradientDrawable()
-            shape.cornerRadius = 12f
-            shape.setColor(Color.parseColor(pair.first))
+            card.setPadding(10, 10, 10, 10)
+
+            val shape = GradientDrawable().apply {
+                cornerRadius = 24f //
+                setColor(bgInt)
+                setStroke(3, textInt) // 边框加粗增强视觉隔离
+            }
             card.background = shape
+
             card.setOnClickListener {
                 selDay = -1
                 grid.post { renderSingleWeek(grid, weekIdx) }
                 showCourseDetailDialog(c)
             }
+
+            // 设置布局参数
             val span = minOf(c.endSection, 10) - c.startSection + 1
-            val lp = GridLayout.LayoutParams(GridLayout.spec(c.startSection, span, GridLayout.FILL), GridLayout.spec(c.day, 1, GridLayout.FILL))
-            lp.width = cellW - 6
-            lp.height = cellH * span - 6
-            lp.setMargins(3, 3, 3, 3)
+            val lp = GridLayout.LayoutParams(
+                GridLayout.spec(c.startSection, span, GridLayout.FILL),
+                GridLayout.spec(c.day, 1, GridLayout.FILL)
+            )
+
+            // 调整间距，让卡片之间有“呼吸感”
+            lp.width = cellW - 8
+            lp.height = cellH * span - 8
+            lp.setMargins(4, 4, 4, 4)
             lp.setGravity(Gravity.FILL)
             card.layoutParams = lp
+
             grid.addView(card)
         }
 
@@ -1824,10 +1905,65 @@ class MainActivity : AppCompatActivity() {
                     selEnd = r
                     grid.post { renderSingleWeek(grid, weekIdx) }
                 }
-                grid.addView(sensor, GridLayout.LayoutParams(GridLayout.spec(r), GridLayout.spec(cl)).apply { width = cellW; height = cellH })
+                grid.addView(sensor, GridLayout.LayoutParams(GridLayout.spec(r), GridLayout.spec(cl)).apply {
+                    width = cellW
+                    height = cellH
+                })
+            }
+        } // 🌟 循环在这里结束
+
+        // 2. 循环结束后，统一更新一次锁屏看板
+        // --- 🌟 唯一正确的通知更新逻辑：必须放在 renderSingleWeek 结尾大括号前 ---
+        // --- 🌟 暴力找回通知版：删掉了所有复杂的判断 ---
+        val now = Calendar.getInstance()
+        val today = ((now.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+
+        // 只要是“本周”页面，我们就发通知
+        // --- 🌟 智能通知看板：上课显当前，下课显下节 ---
+        // --- 🌟 智能判定：进行中 VS 即将开始 ---
+        if (weekIdx == currentWeek) {
+            val now = Calendar.getInstance()
+            val today = ((now.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+            val currentTime = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+
+            val todayCourses = (fetchedList + manualList).filter {
+                it.day == today && it.weekList.contains(weekIdx)
+            }.sortedBy { it.startSection }
+
+            if (todayCourses.isNotEmpty()) {
+                val displayCourse = todayCourses.find {
+                    val endTime = when(it.endSection) {
+                        1 -> 8*60+55; 2 -> 9*60+50; 3 -> 10*60+55; 4 -> 11*60+50; 5 -> 15*60+5;
+                        6 -> 16*60+0; 7 -> 17*60+5; 8 -> 18*60+0; 9 -> 20*60+15; 10 -> 21*60+10
+                        else -> 0
+                    }
+                    currentTime < endTime
+                } ?: todayCourses.first()
+
+                // 🌟 计算状态
+                val startTime = when(displayCourse.startSection) {
+                    1 -> 8*60+10; 2 -> 9*60+5; 3 -> 10*60+10; 4 -> 11*60+5; 5 -> 14*60+20;
+                    6 -> 15*60+15; 7 -> 16*60+20; 8 -> 17*60+15; 9 -> 19*60+30; 10 -> 20*60+25
+                    else -> 0
+                }
+
+                val status = if (currentTime >= startTime) "进行中" else "即将开始"
+
+                val seed = displayCourse.name.hashCode().toLong()
+                val hue = (java.util.Random(seed).nextInt(360)).toFloat()
+                val notifBgInt = androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, 0.8f, 0.75f))
+                val timeRange = "${getTimeRange(displayCourse.startSection).split(" - ")[0]} - ${getTimeRange(displayCourse.endSection).split(" - ")[1]}"
+
+                // 🌟 传入 4 个参数
+                showLockScreenCourse(
+                    displayCourse.name,
+                    "${displayCourse.room} | $timeRange",
+                    notifBgInt,
+                    status
+                )
             }
         }
-    }
+    } // renderSingleWeek 结束 // 函数结束 // 🌟 这里是 renderSingleWeek 的最后一个大括号
     // 💡 辅助：详情弹窗（带右上角编辑按钮）
     private fun showCourseDetailDialog(c: Course) {
         // 1. 创建自定义标题容器 (改用 LinearLayout 彻底解决溢出问题)
@@ -1930,7 +2066,6 @@ class MainActivity : AppCompatActivity() {
         val now = Calendar.getInstance()
         val start = Calendar.getInstance().apply { timeInMillis = semesterStartMillis }
 
-        // 将两个时间都重置到当天的凌晨 0 点，避免小时数干扰计算
         now.set(Calendar.HOUR_OF_DAY, 0)
         now.set(Calendar.MINUTE, 0)
         now.set(Calendar.SECOND, 0)
@@ -1938,11 +2073,16 @@ class MainActivity : AppCompatActivity() {
         val diffMillis = now.timeInMillis - start.timeInMillis
         val diffDays = diffMillis / (1000 * 60 * 60 * 24)
 
-        // 关键计算公式
         currentWeek = (diffDays / 7).toInt() + 1
-
         if (currentWeek < 1) currentWeek = 1
-        runOnUiThread { updateStatus("✅ 当前周：第 $currentWeek 周") }
+
+        runOnUiThread {
+            updateStatus("✅ 当前周：第 $currentWeek 周")
+            // 🌟 核心修复：同步更新顶部标题栏文字与颜色
+            val tvTopWeek = findViewById<TextView>(R.id.tv_top_week)
+            tvTopWeek.text = "第 ${currentWeek} 周(本周)"
+            tvTopWeek.setTextColor(Color.parseColor("#2196F3")) // 蓝色高亮本周
+        }
     }
 
     private fun showDatePicker() {
@@ -1952,6 +2092,8 @@ class MainActivity : AppCompatActivity() {
             semesterStartMillis = start.timeInMillis
             getEncryptedPrefs().edit().putLong("start_date", semesterStartMillis).apply()
             calculateCurrentWeek()
+            // 检查并提示用户开启锁屏看板权限
+            checkNotificationPermission()
             viewPager.adapter?.notifyDataSetChanged()
             viewPager.setCurrentItem(currentWeek - 1, false)
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
@@ -1977,9 +2119,13 @@ class MainActivity : AppCompatActivity() {
             val list: List<Course> = Gson().fromJson(json, sType)
             fetchedList.clear()
             fetchedList.addAll(list)
-            runOnUiThread { viewPager.adapter?.notifyDataSetChanged(); updateStatus("✅ 已载入离线课表")}
+            runOnUiThread {
+                viewPager.adapter?.notifyDataSetChanged()
+                // 🌟 核心修改：数据加载完，立刻刷一次通知
+                refreshNotificationOnly()
+                updateStatus("✅ 已载入离线课表")
+            }
         } catch (e: Exception) {
-            // 💡 如果格式对不上，直接清空，防止闪退
             getEncryptedPrefs().edit().remove("saved_kb").apply()
         }
     }
@@ -2286,5 +2432,256 @@ class MainActivity : AppCompatActivity() {
                     cornerRadius = 48f
                 })
             }.show()
+    }
+
+    private fun showForgotPasswordDialog() {
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(60, 40, 60, 0)
+        }
+
+        // 依照教务处参数：学号、身份证、电话
+        val etId = EditText(this).apply { hint = "学号" }
+        val etIdCard = EditText(this).apply {
+            hint = "身份证号 (15或18位)"
+            inputType = android.text.InputType.TYPE_CLASS_TEXT // 身份证可能有 X
+        }
+        val etPhone = EditText(this).apply {
+            hint = "预留手机号 (11位)"
+            inputType = android.text.InputType.TYPE_CLASS_PHONE
+        }
+
+        layout.addView(etId); layout.addView(etIdCard); layout.addView(etPhone)
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("找回密码")
+            .setView(layout)
+            .setPositiveButton("确认提交") { _, _ ->
+                val id = etId.text.toString().trim()
+                val idCard = etIdCard.text.toString().trim()
+                val phone = etPhone.text.toString().trim()
+
+                // 严格校验逻辑
+                if (id.isEmpty() || phone.length != 11 || (idCard.length != 15 && idCard.length != 18)) {
+                    Toast.makeText(this, "输入格式不正确，请重新检查", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                doLookingPwd(id, idCard, phone)
+            }
+            .setNegativeButton("取消", null)
+            .show()
+    }
+
+    private fun doLookingPwd(id: String, idCard: String, phone: String) {
+        updateStatus("正在通过官方接口核验身份...")
+
+        // 🌟 核心修复：使用你抓包得到的准确 URL
+        val realUrl = "https://jiaowu.sicau.edu.cn/jiaoshi/bangong/mima_cha.asp"
+
+        // 构造请求体，保持 GB2312 编码以适配老旧服务器
+        val body = FormBody.Builder(Charset.forName("GB2312"))
+            .add("password1", id)     // 学号
+            .add("lb", "S")           // 身份：学生
+            .add("password2", idCard) // 身份证
+            .add("password3", phone)  // 电话
+            .add("submit1", "查询")    // 模拟点击查询按钮
+            .build()
+
+        val request = Request.Builder()
+            .url(realUrl)
+            .post(body)
+            // 🌟 伪装：Referer 必须指向那个 .htm 页面，否则会被防盗链拦截
+            .addHeader("Referer", "https://jiaowu.sicau.edu.cn/web/web/web/Looking_pwd.htm")
+            .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+            .build()
+
+        myClient.newCall(request).enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                updateStatus("网络连接异常，请检查网络")
+            }
+
+            override fun onResponse(call: Call, response: Response) {
+                val html = decodeGb2312(response) //
+                val doc = org.jsoup.Jsoup.parse(html)
+                val resultText = doc.text()
+
+                runOnUiThread {
+                    // 根据返回的 HTML 特征判断结果
+                    if (resultText.contains("成功") || resultText.contains("匹配") || html.contains("window.close")) {
+                        Toast.makeText(this@MainActivity, "✅ 验证通过！密码将通过短信发送，请注意查收", Toast.LENGTH_LONG).show()
+                    } else {
+                        // 如果失败，显示教务处的具体报错原因
+                        val errorMsg = if (resultText.length > 80) resultText.take(80) + "..." else resultText
+                        androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                            .setTitle("找回结果")
+                            .setMessage(errorMsg)
+                            .setPositiveButton("确定", null)
+                            .show()
+                    }
+                }
+            }
+        })
+    }
+
+    // 🌟 1. 检查并申请通知权限
+    private fun checkNotificationPermission() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            // 🌟 必须使用这个标准的检查方式
+            val status = androidx.core.content.ContextCompat.checkSelfPermission(
+                this, android.Manifest.permission.POST_NOTIFICATIONS
+            )
+            if (status != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                androidx.core.app.ActivityCompat.requestPermissions(
+                    this, arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101
+                )
+            }
+        }
+    }
+
+    // 🌟 2. 安全地发送通知
+    // 🌟 1. 唯一的、安全的通知发送函数
+    /**
+     * 🌟 锁屏看板完整代码
+     * @param courseName 课程名称
+     * @param room 教室信息
+     * @param color 动态多巴胺颜色（由课表计算得出）
+     */
+    // 🌟 核心修复：增加第三个参数 color: Int
+    // 🌟 核心修复：函数头必须定义 3 个参数，才能接收传进来的 bgInt
+    /**
+     * 🌟 深度美化版：锁屏看板发送函数
+     */
+    // 🌟 核心修复：确保参数列表包含 status: String
+    private fun showLockScreenCourse(courseName: String, room: String, color: Int, status: String) {
+        createNotificationChannel()
+
+        // 1. 权限检查
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS)
+                != android.content.pm.PackageManager.PERMISSION_GRANTED) return
+        }
+
+        // 2. 加载布局并设置文字
+        val remoteViews = RemoteViews(packageName, R.layout.notification_course)
+        remoteViews.setTextViewText(R.id.notif_course_name, courseName)
+        remoteViews.setTextViewText(R.id.notif_course_room, "📍 $room")
+        remoteViews.setTextViewText(R.id.notif_status_tag, status)
+
+        if (status == "即将开始") {
+            remoteViews.setTextColor(R.id.notif_status_tag, android.graphics.Color.GRAY)
+        } else {
+            remoteViews.setTextColor(R.id.notif_status_tag, android.graphics.Color.parseColor("#2196F3"))
+        }
+
+        remoteViews.setInt(R.id.notif_color_block, "setBackgroundColor", color)
+        remoteViews.setTextColor(R.id.notif_color_block, android.graphics.Color.WHITE)
+
+        // 🌟 3. 新增：准备点击跳转的逻辑
+        // Intent 指向当前的 MainActivity
+        val intent = Intent(this, MainActivity::class.java).apply {
+            // 确保点击时不会重复打开多个 Activity 实例
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+
+        // 将 Intent 包装成 PendingIntent (由系统代为执行)
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            0,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        // 4. 构建并发送通知
+        val builder = androidx.core.app.NotificationCompat.Builder(this, "course_monitor_v99")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            //.setCustomContentView(remoteViews)
+            //.setCustomBigContentView(remoteViews)
+            .setContentTitle(courseName)
+            .setContentText(room)
+            .setOngoing(true)
+            .setVisibility(androidx.core.app.NotificationCompat.VISIBILITY_PUBLIC)
+            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MAX)
+            .setCategory(androidx.core.app.NotificationCompat.CATEGORY_REMINDER)
+            .setContentIntent(pendingIntent) // 🌟 核心修改：设置点击意图
+            .setOnlyAlertOnce(true)
+
+        try {
+            val manager = androidx.core.app.NotificationManagerCompat.from(this)
+            manager.notify(10086, builder.build())
+            Log.d("Notif", "✅ 发送成功: $courseName ($status)")
+        } catch (e: Exception) {
+            Log.e("Notif", "❌ 发送失败: ${e.message}")
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 🌟 核心：不再寻找 grid，直接调用纯逻辑函数刷新通知
+        if (currentWeek != 0) {
+            refreshNotificationOnly()
+            Log.d("Notif", "🏠 回到前台，已触发实时通知检查")
+        }
+    }
+
+    // 🌟 只要你的 App 彻底关闭，就停止“心跳”计时器
+    override fun onDestroy() {
+        super.onDestroy()
+        // 🌟 只有当 Handler 已经初始化了，才去移除它，防止崩溃
+        if (::tickHandler.isInitialized) {
+            tickHandler.removeCallbacks(tickRunnable)
+        }
+    }
+
+    // 🌟 专门用于刷新通知，不依赖 UI 布局
+    private fun refreshNotificationOnly() {
+        if (currentWeek == 0) return
+
+        val now = Calendar.getInstance()
+        val today = ((now.get(Calendar.DAY_OF_WEEK) + 5) % 7) + 1
+        val currentTime = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
+
+        val todayCourses = (fetchedList + manualList).filter {
+            it.day == today && it.weekList.contains(currentWeek)
+        }.sortedBy { it.startSection }
+
+        if (todayCourses.isNotEmpty()) {
+            // 1. 寻找“还没下课”的课
+            val displayCourse = todayCourses.find {
+                val endTime = when(it.endSection) {
+                    1 -> 8*60+55; 2 -> 9*60+50; 3 -> 10*60+55; 4 -> 11*60+50; 5 -> 15*60+5;
+                    6 -> 16*60+0; 7 -> 17*60+5; 8 -> 18*60+0; 9 -> 20*60+15; 10 -> 21*60+10
+                    else -> 0
+                }
+                currentTime < endTime
+            }
+
+            // 🌟 核心修改：如果没有“还没下课”的课了，说明今天课上完了
+            if (displayCourse == null) {
+                // 方案 A：显示“今日课程已结束”
+                showLockScreenCourse("今日课程已结束", "早点休息 🌙", android.graphics.Color.GRAY, "已完成")
+
+                // 方案 B：如果你想让通知直接消失，取消上面的注释并改用下面这行：
+                // androidx.core.app.NotificationManagerCompat.from(this).cancel(10086)
+                return
+            }
+
+            // 2. 正常显示逻辑（进行中/即将开始）
+            val startTime = when(displayCourse.startSection) {
+                1 -> 8*60+10; 2 -> 9*60+5; 3 -> 10*60+10; 4 -> 11*60+5; 5 -> 14*60+20;
+                6 -> 15*60+15; 7 -> 16*60+20; 8 -> 17*60+15; 9 -> 19*60+30; 10 -> 20*60+25
+                else -> 0
+            }
+            val status = if (currentTime >= startTime) "进行中" else "即将开始"
+
+            val seed = displayCourse.name.hashCode().toLong()
+            val hue = (java.util.Random(seed).nextInt(360)).toFloat()
+            val notifBgInt = androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, 0.8f, 0.75f))
+            val timeRange = "${getTimeRange(displayCourse.startSection).split(" - ")[0]} - ${getTimeRange(displayCourse.endSection).split(" - ")[1]}"
+
+            showLockScreenCourse(displayCourse.name, "${displayCourse.room} | $timeRange", notifBgInt, status)
+        } else {
+            // 今天原本就没课的情况
+            showLockScreenCourse("今日无课", "享受自由时光 ☕", android.graphics.Color.LTGRAY, "休假中")
+        }
     }
 }
