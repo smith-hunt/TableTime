@@ -33,7 +33,7 @@ import android.os.Looper
 import android.widget.GridLayout
 import android.content.Intent
 import android.app.PendingIntent
-
+import android.graphics.Typeface
 data class Course(
     var name: String,
     var teacher: String,
@@ -131,6 +131,18 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun playFadeInAnim(view: View, delay: Long) {
+        view.alpha = 0f // 初始透明
+        view.translationY = 100f // 初始位置向下偏移 100 像素
+
+        view.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .setDuration(400) // 动画持续 400 毫秒
+            .setStartDelay(delay) // 🌟 关键：每个卡片延迟一点点，形成“鱼贯而入”的效果
+            .setInterpolator(android.view.animation.DecelerateInterpolator())
+            .start()
+    }
     private fun createNotificationChannel() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             val manager = getSystemService(android.app.NotificationManager::class.java)
@@ -645,7 +657,8 @@ class MainActivity : AppCompatActivity() {
         val container = findViewById<LinearLayout>(R.id.grade_container) ?: return
         container.removeAllViews()
 
-        for (g in grades) {
+        // 🌟 核心修改 1：改用 forEachIndexed 拿到 index
+        grades.forEachIndexed { index, g ->
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 setPadding(40, 35, 40, 35)
@@ -659,17 +672,14 @@ class MainActivity : AppCompatActivity() {
                 elevation = 4f
             }
 
-            // 🌟 核心：使用 RelativeLayout 确保分数位置绝对固定
+            // --- 内部 UI 逻辑保持你原来的不动 ---
             val topRow = RelativeLayout(this).apply {
                 layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
             }
-
-            // 1. 右侧分数：先定义它，给它预留空间
             val tvScore = TextView(this).apply {
                 id = View.generateViewId()
                 text = g.score
                 textSize = 20f
-                // 🌟 分数换颜色：这里换成了更有活力的“深青色”，与绩点区分
                 setTextColor(Color.parseColor("#00897B"))
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 val p = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
@@ -677,54 +687,49 @@ class MainActivity : AppCompatActivity() {
                 p.addRule(RelativeLayout.CENTER_VERTICAL)
                 layoutParams = p
             }
-
-            // 2. 左侧容器：包含 名称 + 绩点
             val leftContainer = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 val p = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
                 p.addRule(RelativeLayout.ALIGN_PARENT_START)
-                p.addRule(RelativeLayout.START_OF, tvScore.id) // 🌟 绝对不会挡住分数
-                p.setMarginEnd(20) // 留点呼吸间距
+                p.addRule(RelativeLayout.START_OF, tvScore.id)
+                p.setMarginEnd(20)
                 layoutParams = p
             }
-
             val tvName = TextView(this).apply {
-                text = g.name
-                textSize = 15f
-                setTextColor(Color.parseColor("#333333"))
-                setTypeface(null, android.graphics.Typeface.BOLD)
+                text = g.name; textSize = 15f; setTextColor(Color.parseColor("#333333"))
+                setTypeface(null, android.graphics.Typeface.BOLD); setSingleLine(true)
                 ellipsize = android.text.TextUtils.TruncateAt.END
-                setSingleLine(true)
-                // 🌟 关键：权重设为 1，名称长了会自动打省略号，保护绩点和分数
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
             }
-
             val tvGpa = TextView(this).apply {
-                text = " [绩点 ${g.gpa}]"
-                textSize = 13f
-                // 🌟 绩点用蓝色
-                setTextColor(Color.parseColor("#2196F3"))
+                text = " [绩点 ${g.gpa}]"; textSize = 13f; setTextColor(Color.parseColor("#2196F3"))
                 layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
             }
-
-            leftContainer.addView(tvName)
-            leftContainer.addView(tvGpa)
-
-            topRow.addView(tvScore)
-            topRow.addView(leftContainer)
-
-            // 底部详情栏
+            leftContainer.addView(tvName); leftContainer.addView(tvGpa)
+            topRow.addView(tvScore); topRow.addView(leftContainer)
             val tvDetail = TextView(this).apply {
                 this.text = "学分: ${g.credit}  |  ${g.nature}"
-                this.setTextSize(12f)
-                this.setTextColor(Color.parseColor("#999999"))
+                this.setTextSize(12f); this.setTextColor(Color.parseColor("#999999"))
                 setPadding(0, 10, 0, 0)
             }
+            card.addView(topRow); card.addView(tvDetail)
+            // ------------------------------------
 
-            card.addView(topRow)
-            card.addView(tvDetail)
             container.addView(card)
+
+            // 🌟 核心修改 2：给每个卡片加上“丝滑入场”动画
+            card.alpha = 0f         // 初始透明
+            card.translationY = 60f // 初始向下位移一点
+
+            card.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(400)
+                // 🌟 每个卡片比前一个晚 50 毫秒，形成阶梯流出的效果
+                .setStartDelay((index * 50).toLong())
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .start()
         }
     }
 
@@ -909,10 +914,10 @@ class MainActivity : AppCompatActivity() {
         val container = findViewById<LinearLayout>(R.id.plan_container) ?: return
         container.removeAllViews()
 
-        // 🌟 核心修复 1：显示数据时，把那个“请选择项目”的占位文字彻底隐藏，消除空白
         findViewById<TextView>(R.id.tv_credit_content)?.let { it.visibility = View.GONE }
 
-        for (cat in categories) {
+        // 🌟 核心修改 1：改用 forEachIndexed 拿到 index 来做阶梯动画
+        categories.forEachIndexed { index, cat ->
             val card = LinearLayout(this).apply {
                 setOrientation(LinearLayout.VERTICAL)
                 setPadding(48, 44, 48, 44)
@@ -926,14 +931,12 @@ class MainActivity : AppCompatActivity() {
                 setElevation(4f)
             }
 
-            // 🌟 核心修复 2：使用 RelativeLayout 锚点逻辑防止遮挡
+            // --- 内部 UI 逻辑完全保留你原来的（RelativeLayout、ProgressBar 等） ---
             val titleRow = RelativeLayout(this).apply {
                 setLayoutParams(LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             }
-
-            // 1. 先定义百分比文本（靠右对齐）
             val tvPercent = TextView(this).apply {
-                id = View.generateViewId() // 🌟 生成唯一 ID
+                id = View.generateViewId()
                 setText("${cat.progress}%")
                 setTextSize(16f)
                 setTypeface(null, android.graphics.Typeface.BOLD)
@@ -941,7 +944,6 @@ class MainActivity : AppCompatActivity() {
                 p.addRule(RelativeLayout.ALIGN_PARENT_END)
                 p.addRule(RelativeLayout.CENTER_VERTICAL)
                 setLayoutParams(p)
-
                 val progressVal = cat.progress.toDoubleOrNull() ?: 0.0
                 setTextColor(Color.parseColor(when {
                     progressVal >= 90 -> "#4CAF50"
@@ -949,29 +951,18 @@ class MainActivity : AppCompatActivity() {
                     else -> "#FFA726"
                 }))
             }
-
-            // 2. 名称文本（靠左对齐，但截止到百分比之前）
             val tvName = TextView(this).apply {
-                setText(cat.name)
-                setTextSize(15f)
-                setTextColor(Color.parseColor("#1A237E"))
-                setTypeface(null, android.graphics.Typeface.BOLD)
-
-                // 🌟 关键：防止溢出
-                setSingleLine(true)
+                setText(cat.name); setTextSize(15f); setTextColor(Color.parseColor("#1A237E"))
+                setTypeface(null, android.graphics.Typeface.BOLD); setSingleLine(true)
                 setEllipsize(android.text.TextUtils.TruncateAt.END)
-
                 val p = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
                 p.addRule(RelativeLayout.ALIGN_PARENT_START)
-                p.addRule(RelativeLayout.START_OF, tvPercent.id) // 🌟 绝对不准越过百分比
+                p.addRule(RelativeLayout.START_OF, tvPercent.id)
                 p.setMarginEnd(20)
                 setLayoutParams(p)
             }
+            titleRow.addView(tvPercent); titleRow.addView(tvName)
 
-            titleRow.addView(tvPercent)
-            titleRow.addView(tvName)
-
-            // 进度条和详情（代码保持不变...）
             val progressBar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
                 setLayoutParams(LinearLayout.LayoutParams(MATCH_PARENT, 16).apply { setMargins(0, 24, 0, 24) })
                 setMax(100)
@@ -981,33 +972,37 @@ class MainActivity : AppCompatActivity() {
             }
 
             val tvData = TextView(this).apply {
-                // 1. 获取原始 gap 并乘以 -1
                 val originalGap = cat.gap.toDoubleOrNull() ?: 0.0
                 val flippedGap = originalGap * -1
-
-                // 2. 根据正负值决定显示的文字内容
                 val gapStatusText = when {
-                    flippedGap < 0 -> "已超修 ${-flippedGap} 分" // 🌟 如果是负数，取绝对值显示为“超修”
-                    flippedGap > 0 -> "还差 $flippedGap 分"      // 🌟 如果是正数，显示为“还差”
-                    else -> "已修满"                             // 🌟 如果是 0
+                    flippedGap < 0 -> "已超修 ${-flippedGap} 分"
+                    flippedGap > 0 -> "还差 $flippedGap 分"
+                    else -> "已修满"
                 }
-
-                // 3. 设置显示文字并根据状态切换颜色 (可选)
                 setText("已修 ${cat.earned} / 应修 ${cat.required} ($gapStatusText)")
                 setTextSize(12f)
-
-                // 🌟 进阶：如果是超修或修满，颜色变绿；如果还差分，保持灰色或变红
-                if (flippedGap <= 0) {
-                    setTextColor(Color.parseColor("#4CAF50")) // 绿色
-                } else {
-                    setTextColor(Color.parseColor("#90A4AE")) // 默认灰
-                }
+                if (flippedGap <= 0) setTextColor(Color.parseColor("#4CAF50")) else setTextColor(Color.parseColor("#90A4AE"))
             }
 
             card.addView(titleRow)
             card.addView(progressBar)
             card.addView(tvData)
+            // -------------------------------------------------------------------
+
             container.addView(card)
+
+            // 🌟 核心修改 2：注入灵魂，设置出场动画
+            card.alpha = 0f          // 初始透明
+            card.translationY = 50f  // 初始向下偏移
+
+            card.animate()
+                .alpha(1f)
+                .translationY(0f)
+                .setDuration(450)    // 动画时长
+                // 🌟 阶梯效果：第一个立即出，第二个晚80ms，第三个晚160ms...
+                .setStartDelay((index * 80).toLong())
+                .setInterpolator(android.view.animation.DecelerateInterpolator())
+                .start()
         }
     }
 
@@ -1268,122 +1263,153 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun showCourseEditDialog(c: Course?, d: Int = 0, s: Int = 0, e: Int = 0) {
-        // 1. 确定是编辑还是添加
         val isEdit = c != null
-        // 如果是编辑，使用传入的课程；如果是添加，新建一个默认25周全选的课程
         val target = c ?: Course("", "", "", d, s, e, (1..25).toMutableList())
 
-        val root = LinearLayout(this)
-        root.orientation = LinearLayout.VERTICAL
-        root.setPadding(50, 30, 50, 0)
+        // 🌟 1. 获取主题色：编辑时跟随课程颜色，添加时默认蓝色
+        val themeColor = if (isEdit) {
+            val hue = (target.name.hashCode().toLong().let { java.util.Random(it).nextInt(360) }).toFloat()
+            androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, 0.5f, 0.45f))
+        } else {
+            Color.parseColor("#2196F3")
+        }
 
-        // 2. 显示时间详情（不论是加课还是改课，让用户看清楚时间）
-        val tvTimeInfo = TextView(this)
-        tvTimeInfo.text = "节次: 周${target.day} 第${target.startSection}-${target.endSection}节"
-        tvTimeInfo.textSize = 14f
-        tvTimeInfo.setTextColor(Color.GRAY)
-        tvTimeInfo.setPadding(0, 0, 0, 20)
-        root.addView(tvTimeInfo)
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(40, 30, 40, 30)
+            setBackgroundColor(Color.parseColor("#F8F9FA")) // 浅灰色底，突出白色卡片
+        }
 
-        // 3. 基础信息输入框
-        val nE = EditText(this)
-        nE.hint = "课程名"
-        nE.setText(target.name)
-        root.addView(nE)
+        // 🌟 2. 顶部时间指示标签
+        val tvTimeTag = TextView(this).apply {
+            text = "⏰ 周${target.day} 第${target.startSection}-${target.endSection}节"
+            textSize = 13f
+            setTextColor(themeColor)
+            setPadding(20, 10, 20, 10)
+            gravity = Gravity.CENTER
+            background = GradientDrawable().apply {
+                setColor(themeColor.adjustAlpha(0.1f))
+                cornerRadius = 100f
+            }
+            layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply {
+                gravity = Gravity.CENTER
+                setMargins(0, 0, 0, 30)
+            }
+        }
+        root.addView(tvTimeTag)
 
-        val rE = EditText(this)
-        rE.hint = "教室"
-        rE.setText(target.room)
-        root.addView(rE)
+        // 🌟 3. 基础信息卡片（白色圆角）
+        val infoCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(30, 20, 30, 20)
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = 30f
+            }
+            elevation = 4f
+        }
 
-        val tE = EditText(this)
-        tE.hint = "老师"
-        tE.setText(target.teacher)
-        root.addView(tE)
+        fun createStyledEdit(hintText: String, initVal: String): EditText {
+            return EditText(this).apply {
+                hint = hintText
+                setText(initVal)
+                background = null // 去掉难看的下划线
+                setPadding(10, 30, 10, 30)
+                textSize = 15f
+            }
+        }
 
-        // 4. 快捷按钮行 (全选/单/双)
-        val btnRow = LinearLayout(this)
-        btnRow.orientation = LinearLayout.HORIZONTAL
-        btnRow.setPadding(0, 20, 0, 10)
+        val nE = createStyledEdit("请输入课程名", target.name)
+        val rE = createStyledEdit("请输入教室", target.room)
+        val tE = createStyledEdit("请输入老师名字", target.teacher)
 
-        val bAll = Button(this, null, android.R.attr.buttonStyleSmall)
-        bAll.text = "全选"
-        btnRow.addView(bAll)
+        infoCard.addView(nE)
+        // 加两条细细的分隔线
+        infoCard.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2); setBackgroundColor(Color.parseColor("#EEEEEE")) })
+        infoCard.addView(rE)
+        infoCard.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2); setBackgroundColor(Color.parseColor("#EEEEEE")) })
+        infoCard.addView(tE)
+        root.addView(infoCard)
 
-        val bOdd = Button(this, null, android.R.attr.buttonStyleSmall)
-        bOdd.text = "单周"
-        btnRow.addView(bOdd)
+        // 🌟 4. 周次选择标题与快捷按钮
+        val weekTitleRow = RelativeLayout(this).apply {
+            setPadding(10, 40, 10, 20)
+        }
+        val tvWeekTitle = TextView(this).apply {
+            text = "选择上课周次"
+            setTypeface(null, Typeface.BOLD)
+            setTextColor(Color.BLACK)
+        }
+        weekTitleRow.addView(tvWeekTitle)
+        root.addView(weekTitleRow)
 
-        val bEven = Button(this, null, android.R.attr.buttonStyleSmall)
-        bEven.text = "双周"
-        btnRow.addView(bEven)
-
+        val btnRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 0, 0, 20)
+        }
+        fun createQuickBtn(label: String) = Button(this, null, android.R.attr.buttonStyleSmall).apply {
+            text = label
+            textSize = 12f
+            background = GradientDrawable().apply {
+                setStroke(2, Color.LTGRAY)
+                cornerRadius = 15f
+            }
+            layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f).apply { setMargins(5, 0, 5, 0) }
+        }
+        val bAll = createQuickBtn("全选"); val bOdd = createQuickBtn("单周"); val bEven = createQuickBtn("双周")
+        btnRow.addView(bAll); btnRow.addView(bOdd); btnRow.addView(bEven)
         root.addView(btnRow)
 
-        // 5. 25周方块网格
-        val weekGrid = GridLayout(this)
-        weekGrid.columnCount = 5
-
+        // 🌟 5. 周次网格美化
+        val weekGrid = GridLayout(this).apply { columnCount = 5 }
         val boxes = mutableListOf<CheckBox>()
         for (i in 1..25) {
-            val cb = CheckBox(this)
-            cb.text = "$i"
-            cb.isChecked = target.weekList.contains(i)
-            cb.setButtonDrawable(0) // 去掉默认的打勾框
-            cb.gravity = Gravity.CENTER
+            val cb = CheckBox(this).apply {
+                text = "$i"
+                isChecked = target.weekList.contains(i)
+                buttonDrawable = null // 隐藏原生框
+                gravity = Gravity.CENTER
+                textSize = 13f
+            }
 
-            // 💡 1. 删掉了原来的 setBackgroundResource(android.R.drawable.btn_default)
-
-            val glp = GridLayout.LayoutParams(
-                GridLayout.spec(GridLayout.UNDEFINED, 1f),
-                GridLayout.spec(GridLayout.UNDEFINED, 1f)
-            )
-            glp.width = 0
-            glp.height = 100
-            glp.setMargins(4, 4, 4, 4)
-            cb.layoutParams = glp
-
-            // 💡 2. 专门写一个刷新背景的逻辑（带点圆角和边框，更好看）
-            val updateBackground = { button: View, isChecked: Boolean ->
-                val shape = GradientDrawable()
-                shape.cornerRadius = 8f // 一点小圆角
-                if (isChecked) {
-                    shape.setColor(Color.parseColor("#E3F2FD")) // 选中：浅蓝色背景
-                    shape.setStroke(0, Color.TRANSPARENT)
-                } else {
-                    shape.setColor(Color.TRANSPARENT) // 未选：透明（透出白色底）
-                    shape.setStroke(2, Color.parseColor("#E0E0E0")) // 未选：加上浅灰色边框，像个正规的框
+            val updateBg = { box: CheckBox, checked: Boolean ->
+                box.background = GradientDrawable().apply {
+                    cornerRadius = 15f
+                    if (checked) {
+                        setColor(themeColor)
+                        box.setTextColor(Color.WHITE)
+                    } else {
+                        setColor(Color.WHITE)
+                        setStroke(2, Color.parseColor("#DDDDDD"))
+                        box.setTextColor(Color.GRAY)
+                    }
                 }
-                button.background = shape
             }
+            updateBg(cb, cb.isChecked)
+            cb.setOnCheckedChangeListener { b, checked -> updateBg(b as CheckBox, checked) }
 
-            // 💡 3. 初始化时强制刷一遍背景，确保一进来就是对的颜色
-            updateBackground(cb, cb.isChecked)
-
-            // 💡 4. 点击时再刷一遍
-            cb.setOnCheckedChangeListener { button, checked ->
-                updateBackground(button, checked)
+            val glp = GridLayout.LayoutParams(GridLayout.spec(GridLayout.UNDEFINED, 1f), GridLayout.spec(GridLayout.UNDEFINED, 1f)).apply {
+                width = 0; height = 110; setMargins(8, 8, 8, 8)
             }
-
+            cb.layoutParams = glp
             boxes.add(cb)
             weekGrid.addView(cb)
         }
 
-        // 快捷键逻辑
+        val scroll = ScrollView(this).apply {
+            addView(weekGrid)
+            layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 500)
+        }
+        root.addView(scroll)
+
+        // 快捷逻辑
         bAll.setOnClickListener { boxes.forEach { it.isChecked = true } }
         bOdd.setOnClickListener { boxes.forEachIndexed { i, b -> b.isChecked = (i + 1) % 2 != 0 } }
         bEven.setOnClickListener { boxes.forEachIndexed { i, b -> b.isChecked = (i + 1) % 2 == 0 } }
 
-        // 6. 滚动区域
-        val scroll = ScrollView(this)
-        scroll.addView(weekGrid)
-        val slp = LinearLayout.LayoutParams(MATCH_PARENT, 500)
-        scroll.layoutParams = slp
-        root.addView(scroll)
-
-        // 7. 弹窗保存
-        AlertDialog.Builder(this)
-            .setTitle(if (isEdit) "编辑课程" else "添加课程")
+        // 🌟 6. 弹出对话框并应用样式
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(if (isEdit) "修改课程信息" else "添加新课程")
             .setView(root)
             .setPositiveButton("保存") { _, _ ->
                 target.name = nE.text.toString()
@@ -1391,16 +1417,23 @@ class MainActivity : AppCompatActivity() {
                 target.teacher = tE.text.toString()
                 target.weekList.clear()
                 boxes.forEachIndexed { i, b -> if (b.isChecked) target.weekList.add(i + 1) }
-
-                // 如果是新课，才加入列表；如果是老课，直接修改引用的内容即可
                 if (!isEdit) manualList.add(target)
-
                 saveCoursesToLocal(fetchedList + manualList)
                 selDay = -1
                 viewPager.adapter?.notifyDataSetChanged()
             }
             .setNegativeButton("取消", null)
-            .show()
+            .create()
+
+        dialog.window?.setBackgroundDrawable(GradientDrawable().apply { setColor(Color.parseColor("#F8F9FA")); cornerRadius = 40f })
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(themeColor)
+    }
+
+    // 辅助透明度函数
+    private fun Int.adjustAlpha(factor: Float): Int {
+        val alpha = Math.round(Color.alpha(this) * factor)
+        return Color.argb(alpha, Color.red(this), Color.green(this), Color.blue(this))
     }
 
     private fun parseFinalKb(html: String) {
@@ -1609,8 +1642,6 @@ class MainActivity : AppCompatActivity() {
                 dCal.timeInMillis = weekStartCal.timeInMillis + (i - 1) * 24 * 3600000L
                 val dStr = "${dCal.get(Calendar.MONTH) + 1}.${dCal.get(Calendar.DAY_OF_MONTH)}"
 
-                // 打印调试信息，确保逻辑走到这里
-                android.util.Log.d("DEBUG_DATE", "渲染 $dStr 到第 $i 列")
 
                 val tvD = TextView(this).apply {
                     setText(dStr)
@@ -1637,10 +1668,14 @@ class MainActivity : AppCompatActivity() {
                 val todayStr = "${today.get(Calendar.MONTH) + 1}.${today.get(Calendar.DAY_OF_MONTH)}"
                 if (dStr == todayStr && semesterStartMillis != 0L) {
                     box.setBackground(GradientDrawable().apply {
-                        setStroke(4, Color.parseColor("#2196F3"))
-                        setColor(Color.parseColor("#E3F2FD"))
-                        setCornerRadius(12f)
+                        // 🌟 改为纯蓝色背景，去掉边框
+                        setColor(Color.parseColor("#2196F3"))
+                        cornerRadius = 20f // 圆角调大一点更灵动
                     })
+                    // 同时也把里面的文字颜色改了（需要遍历 box 里的 TextView）
+                    for (idx in 0 until box.childCount) {
+                        (box.getChildAt(idx) as? TextView)?.setTextColor(Color.WHITE)
+                    }
                 }
             }
             grid.addView(box)
@@ -1665,33 +1700,34 @@ class MainActivity : AppCompatActivity() {
             val wrapper = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
+                // 🌟 移除背景颜色，保持透明，让视觉更通透
+                val lp = GridLayout.LayoutParams(GridLayout.spec(i), GridLayout.spec(0))
+                lp.width = labelW
+                lp.height = cellH
+                layoutParams = lp
             }
 
-            // 上方的节次数字
+            // 上方的节次数字：加粗，颜色稍深
             val tvIndex = TextView(this).apply {
                 text = "$i"
-                textSize = 14f
-                setTextColor(Color.BLACK)
+                textSize = 13f
+                setTextColor(Color.parseColor("#333333")) // 深灰色，比纯黑高级
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 gravity = Gravity.CENTER
             }
 
-            // 下方的具体时间段
+            // 下方的具体时间段：更小一点，颜色变淡，拉开层级
             val tvTime = TextView(this).apply {
                 text = timeSlots[i]
-                textSize = 9f
-                setTextColor(Color.GRAY) // 🌟 灰色表示
+                textSize = 8.5f
+                setTextColor(Color.parseColor("#AAAAAA")) // 浅灰色，作为辅助信息
                 gravity = Gravity.CENTER
-                setLineSpacing(0f, 0.8f) // 紧凑一点
+                setLineSpacing(0f, 0.9f) // 紧凑一点
+                setPadding(0, 2, 0, 0)
             }
 
             wrapper.addView(tvIndex)
             wrapper.addView(tvTime)
-
-            val lp = GridLayout.LayoutParams(GridLayout.spec(i), GridLayout.spec(0))
-            lp.width = labelW
-            lp.height = cellH
-            wrapper.layoutParams = lp
             grid.addView(wrapper)
         }
 
@@ -1737,6 +1773,11 @@ class MainActivity : AppCompatActivity() {
                 setStroke(3, textInt) // 边框加粗增强视觉隔离
             }
             card.background = shape
+
+// 🌟 增加点击水波纹效果
+            val outValue = android.util.TypedValue()
+            theme.resolveAttribute(android.R.attr.selectableItemBackground, outValue, true)
+            card.foreground = getDrawable(outValue.resourceId)
 
             card.setOnClickListener {
                 selDay = -1
@@ -1966,65 +2007,74 @@ class MainActivity : AppCompatActivity() {
     } // renderSingleWeek 结束 // 函数结束 // 🌟 这里是 renderSingleWeek 的最后一个大括号
     // 💡 辅助：详情弹窗（带右上角编辑按钮）
     private fun showCourseDetailDialog(c: Course) {
-        // 1. 创建自定义标题容器 (改用 LinearLayout 彻底解决溢出问题)
+        // 1. 🌟 获取这节课的专属颜色（与课表格子保持绝对统一）
+        val seed = c.name.hashCode().toLong()
+        val random = java.util.Random(seed)
+        val hue = random.nextInt(360).toFloat()
+        // 这里的饱和度和亮度建议与课表一致，或者稍微加深一点点（0.85f）显质感
+        val themeBgColor = androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, 0.5f, 0.9f))
+        val themeTextColor = androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, 0.5f, 0.3f))
+
+        // 2. 🌟 创建自定义标题容器
         val titleLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL // 让里面的东西垂直居中对齐
-            setPadding(50, 40, 50, 0)
-            layoutParams = android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            )
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(60, 50, 60, 20)
+            // 顶部带个小色块修饰
+            background = GradientDrawable().apply {
+                setColor(themeBgColor)
+                // 只有上方两个圆角
+                cornerRadii = floatArrayOf(48f, 48f, 48f, 48f, 0f, 0f, 0f, 0f)
+            }
         }
 
-        // 2. 创建标题文字（课程名）
         val tvTitle = TextView(this).apply {
             text = c.name
             textSize = 18f
-            setTextColor(Color.BLACK)
+            setTextColor(themeTextColor)
             setTypeface(null, android.graphics.Typeface.BOLD)
-
-            // 限制最多两行，多出来的用...表示
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
-
-            // 💡 核心魔法：宽度设为 0，权重设为 1f
-            // 这样它会老老实实地占满剩下的空间，绝对不会把弹窗撑爆
-            val titleParams = LinearLayout.LayoutParams(
-                0,
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                1f
-            )
-            titleParams.setMargins(0, 0, 30, 0) // 给右边的编辑按钮留点呼吸空间
-            layoutParams = titleParams
+            layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
         }
-        titleLayout.addView(tvTitle)
 
-        // 3. 创建右上角“编辑”按钮
         val btnEdit = TextView(this).apply {
             text = "编辑"
-            setTextColor(Color.parseColor("#2196F3"))
-            textSize = 16f
-            setTypeface(null, android.graphics.Typeface.BOLD)
-            setPadding(20, 10, 20, 10)
-
-            // 按钮就正常包裹自己的内容，不需要权重
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
+            setTextColor(themeTextColor)
+            textSize = 14f
+            setPadding(30, 10, 30, 10)
+            // 给编辑按钮加一个半透明小边框
+            background = GradientDrawable().apply {
+                setStroke(2, themeTextColor)
+                cornerRadius = 100f
+            }
         }
+        titleLayout.addView(tvTitle)
         titleLayout.addView(btnEdit)
-        // 4. 构建对话框内容
-        val msg = "教师: ${c.teacher}\n" +
-                "教室: ${c.room}\n" +
-                "节次: 周${c.day} 第${c.startSection}-${c.endSection}节"
 
+        // 3. 🌟 构建内容区域
+        val scroll = ScrollView(this)
+        val contentLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(60, 40, 60, 60)
+        }
+
+        val infoText = "👤 教师：${c.teacher}\n📍 教室：${c.room}\n⏰ 节次：周${c.day} 第${c.startSection}-${c.endSection}节"
+        val tvContent = TextView(this).apply {
+            text = infoText
+            textSize = 15f
+            setTextColor(Color.parseColor("#666666"))
+            setLineSpacing(15f, 1f) // 增加行间距，不拥挤
+        }
+        contentLayout.addView(tvContent)
+        scroll.addView(contentLayout)
+
+        // 4. 🌟 创建并应用大圆角样式
         val dialog = AlertDialog.Builder(this)
             .setCustomTitle(titleLayout)
-            .setMessage(msg)
-            .setPositiveButton("关闭", null)
-            .setNeutralButton("删除") { _, _ ->
+            .setView(scroll)
+            .setPositiveButton("我知道了", null)
+            .setNeutralButton("删除课程") { _, _ ->
                 fetchedList.remove(c)
                 manualList.remove(c)
                 saveCoursesToLocal(fetchedList + manualList)
@@ -2032,13 +2082,22 @@ class MainActivity : AppCompatActivity() {
             }
             .create()
 
-        // 5. 绑定编辑点击事件
+        // 🌟 核心美化：强制去除系统默认白框，应用自定义大圆角背景
+        dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
+            setColor(Color.WHITE)
+            cornerRadius = 48f // 超大圆角，非常有现代感
+        })
+
         btnEdit.setOnClickListener {
             dialog.dismiss()
-            showCourseEditDialog(c) // 跳转到 25 周编辑页
+            showCourseEditDialog(c)
         }
 
         dialog.show()
+
+        // 5. 🌟 顺便美化底部的按钮颜色
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setTextColor(themeTextColor)
+        dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setTextColor(Color.RED)
     }
 
     // 💡 保证这两函数也存在且逻辑正确
@@ -2267,17 +2326,17 @@ class MainActivity : AppCompatActivity() {
         val container = findViewById<LinearLayout>(R.id.plan_container) ?: return
         container.removeAllViews()
 
-        // 🌟 修复 1：彻底移除占位文字，消灭顶部那一大段空白
         findViewById<TextView>(R.id.tv_credit_content)?.let {
             it.setVisibility(View.GONE)
         }
 
-        for (p in plans) {
+        // 🌟 1. 改用 forEachIndexed，它是实现“顺次滑出”动画的前提
+        plans.forEachIndexed { index, p ->
             val card = LinearLayout(this).apply {
                 setOrientation(LinearLayout.VERTICAL)
                 setPadding(40, 35, 40, 35)
                 val lp = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
-                lp.setMargins(0, 0, 0, 30) // 卡片间距
+                lp.setMargins(0, 0, 0, 30)
                 setLayoutParams(lp)
                 background = GradientDrawable().apply {
                     setColor(Color.WHITE)
@@ -2286,94 +2345,61 @@ class MainActivity : AppCompatActivity() {
                 setElevation(4f)
             }
 
-            // --- 第一行：使用 RelativeLayout 解决名称遮挡 ---
+            // --- 这一部分是你原来的 UI 布局逻辑，100% 保持不动 ---
             val topRow = RelativeLayout(this).apply {
                 setLayoutParams(LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
             }
-
-            // 1. 学分标签：作为右侧锚点，先定义它
             val tvCredit = TextView(this).apply {
-                setId(View.generateViewId()) // 生成动态 ID
-                setText("(${p.credit}学分)")
-                setTextSize(14f)
-                setTextColor(Color.parseColor("#2196F3"))
+                setId(View.generateViewId())
+                setText("(${p.credit}学分)"); setTextSize(14f); setTextColor(Color.parseColor("#2196F3"))
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 val lp = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
-                lp.addRule(RelativeLayout.ALIGN_PARENT_END) // 靠右对齐
-                lp.addRule(RelativeLayout.CENTER_VERTICAL)
+                lp.addRule(RelativeLayout.ALIGN_PARENT_END); lp.addRule(RelativeLayout.CENTER_VERTICAL)
                 setLayoutParams(lp)
             }
-
-            // 2. 课程名称：受学分标签约束，绝对不会遮挡
             val tvName = TextView(this).apply {
-                setText(p.name)
-                setTextSize(16f)
-                setTextColor(Color.parseColor("#222222"))
-                setTypeface(null, android.graphics.Typeface.BOLD)
-
-                // 🌟 核心：单行显示，过长则在学分前打断（...）
-                setSingleLine(true)
-                setEllipsize(android.text.TextUtils.TruncateAt.END)
-
+                setText(p.name); setTextSize(16f); setTextColor(Color.parseColor("#222222"))
+                setTypeface(null, android.graphics.Typeface.BOLD); setSingleLine(true); setEllipsize(android.text.TextUtils.TruncateAt.END)
                 val lp = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
-                lp.addRule(RelativeLayout.ALIGN_PARENT_START) // 靠左
-                lp.addRule(RelativeLayout.START_OF, tvCredit.getId()) // 🌟 关键：界限设在学分标签左边
-                lp.setMarginEnd(20) // 留点呼吸间距
+                lp.addRule(RelativeLayout.ALIGN_PARENT_START); lp.addRule(RelativeLayout.START_OF, tvCredit.getId()); lp.setMarginEnd(20)
                 setLayoutParams(lp)
             }
-
-            topRow.addView(tvCredit)
-            topRow.addView(tvName)
-
-            // --- 第二行：英文名称 ---
+            topRow.addView(tvCredit); topRow.addView(tvName)
             val tvEnName = TextView(this).apply {
-                val enText = if (p.enName.isEmpty()) "无英文名" else p.enName
-                setText(enText)
-                setTextSize(12f)
-                setTextColor(Color.parseColor("#999999"))
-                setSingleLine(true)
-                setEllipsize(android.text.TextUtils.TruncateAt.END)
-                setPadding(0, 8, 0, 16)
+                setText(if (p.enName.isEmpty()) "无英文名" else p.enName); setTextSize(12f); setTextColor(Color.parseColor("#999999"))
+                setSingleLine(true); setEllipsize(android.text.TextUtils.TruncateAt.END); setPadding(0, 8, 0, 16)
             }
+            val bottomRow = RelativeLayout(this).apply { setLayoutParams(LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)) }
+            bottomRow.addView(TextView(this).apply {
+                setText("编号:${p.id} | 性质:${p.nature} | 第${p.term}学期"); setTextSize(12f); setTextColor(Color.parseColor("#777777"))
+                layoutParams = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { addRule(RelativeLayout.ALIGN_PARENT_START) }
+            })
+            bottomRow.addView(TextView(this).apply {
+                setText("详细 >"); setTextSize(13f); setTextColor(Color.parseColor("#2196F3")); setTypeface(null, android.graphics.Typeface.BOLD)
+                layoutParams = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { addRule(RelativeLayout.ALIGN_PARENT_END) }
+            })
+            card.addView(topRow); card.addView(tvEnName); card.addView(bottomRow)
+            // ---------------------------------------------------
 
-            // --- 第三行：底部详情栏 ---
-            val bottomRow = RelativeLayout(this).apply {
-                setLayoutParams(LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
-            }
-
-            val tvInfo = TextView(this).apply {
-                setText("编号:${p.id} | 性质:${p.nature} | 第${p.term}学期")
-                setTextSize(12f)
-                setTextColor(Color.parseColor("#777777"))
-                val lp = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
-                lp.addRule(RelativeLayout.ALIGN_PARENT_START)
-                setLayoutParams(lp)
-            }
-
-            val btnDetail = TextView(this).apply {
-                setText("详细 >")
-                setTextSize(13f)
-                setTextColor(Color.parseColor("#2196F3"))
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                val lp = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
-                lp.addRule(RelativeLayout.ALIGN_PARENT_END)
-                setLayoutParams(lp)
-            }
-
-            bottomRow.addView(tvInfo)
-            bottomRow.addView(btnDetail)
-
-            // 装配
-            card.addView(topRow)
-            card.addView(tvEnName)
-            card.addView(bottomRow)
-
-            // 点击逻辑
             val listener = View.OnClickListener { showPlanDetailDialog(p) }
             card.setOnClickListener(listener)
-            btnDetail.setOnClickListener(listener)
 
+            // 🌟 2. 先把卡片加进容器
             container.addView(card)
+
+            // 🌟 3. 给前 15 个卡片注入“生命力”：入场动画
+            if (index < 15) {
+                card.alpha = 0f         // 初始透明
+                card.translationY = 80f // 初始位置向下偏
+
+                card.animate()
+                    .alpha(1f)          // 变不透明
+                    .translationY(0f)   // 回到原位
+                    .setDuration(400)   // 持续时间
+                    .setStartDelay((index * 40).toLong()) // 阶梯延迟：每个卡片晚 40ms
+                    .setInterpolator(android.view.animation.DecelerateInterpolator())
+                    .start()
+            }
         }
     }
 
@@ -2435,88 +2461,303 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showForgotPasswordDialog() {
-        val layout = LinearLayout(this).apply {
+        // 🌟 1. 创建大圆角背景容器
+        val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(60, 40, 60, 0)
-        }
-
-        // 依照教务处参数：学号、身份证、电话
-        val etId = EditText(this).apply { hint = "学号" }
-        val etIdCard = EditText(this).apply {
-            hint = "身份证号 (15或18位)"
-            inputType = android.text.InputType.TYPE_CLASS_TEXT // 身份证可能有 X
-        }
-        val etPhone = EditText(this).apply {
-            hint = "预留手机号 (11位)"
-            inputType = android.text.InputType.TYPE_CLASS_PHONE
-        }
-
-        layout.addView(etId); layout.addView(etIdCard); layout.addView(etPhone)
-
-        androidx.appcompat.app.AlertDialog.Builder(this)
-            .setTitle("找回密码")
-            .setView(layout)
-            .setPositiveButton("确认提交") { _, _ ->
-                val id = etId.text.toString().trim()
-                val idCard = etIdCard.text.toString().trim()
-                val phone = etPhone.text.toString().trim()
-
-                // 严格校验逻辑
-                if (id.isEmpty() || phone.length != 11 || (idCard.length != 15 && idCard.length != 18)) {
-                    Toast.makeText(this, "输入格式不正确，请重新检查", Toast.LENGTH_SHORT).show()
-                    return@setPositiveButton
-                }
-                doLookingPwd(id, idCard, phone)
+            setPadding(60, 40, 60, 40)
+            background = GradientDrawable().apply {
+                setColor(Color.parseColor("#F8F9FA")) // 浅灰底色
             }
+        }
+
+        // 🌟 2. 增加温馨提示头
+        val tvHint = TextView(this).apply {
+            text = "🔒 身份核验\n请填写以下信息以找回教务系统密码"
+            textSize = 14f
+            setTextColor(Color.GRAY)
+            setLineSpacing(10f, 1f)
+            setPadding(0, 0, 0, 40)
+        }
+        root.addView(tvHint)
+
+        // 🌟 3. 白色卡片式输入区域
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(30, 10, 30, 10)
+            background = GradientDrawable().apply {
+                setColor(Color.WHITE)
+                cornerRadius = 30f
+            }
+            elevation = 4f
+        }
+
+        fun createInput(hintText: String, inputTypeInt: Int): EditText {
+            return EditText(this).apply {
+                hint = hintText
+                inputType = inputTypeInt
+                background = null // 去掉原生下划线
+                textSize = 15f
+                setPadding(20, 40, 20, 40)
+                setHintTextColor(Color.LTGRAY)
+            }
+        }
+
+        val etId = createInput("学号 (例: 202xxxxx)", android.text.InputType.TYPE_CLASS_NUMBER)
+        val etIdCard = createInput("身份证号 (末位 X 请用大写)", android.text.InputType.TYPE_CLASS_TEXT)
+        val etPhone = createInput("预留手机号 (11位数字)", android.text.InputType.TYPE_CLASS_PHONE)
+
+        card.addView(etId)
+        card.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2); setBackgroundColor(Color.parseColor("#EEEEEE")) })
+        card.addView(etIdCard)
+        card.addView(View(this).apply { layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, 2); setBackgroundColor(Color.parseColor("#EEEEEE")) })
+        card.addView(etPhone)
+
+        root.addView(card)
+
+        // 🌟 4. 底部声明
+        val tvSafe = TextView(this).apply {
+            text = "ℹ️ 信息将加密传输至学校教务处服务器"
+            textSize = 11f
+            setTextColor(Color.parseColor("#B0BEC5"))
+            gravity = Gravity.CENTER
+            setPadding(0, 30, 0, 0)
+        }
+        root.addView(tvSafe)
+
+        // 🌟 5. 创建对话框
+
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("找回密码")
+            .setView(root)
+            .setPositiveButton("立即核验", null)
             .setNegativeButton("取消", null)
-            .show()
+            .create()
+
+        dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
+            setColor(Color.parseColor("#F8F9FA")); cornerRadius = 50f
+        })
+
+        dialog.show()
+
+        val btnConfirm = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+        btnConfirm.setTextColor(Color.parseColor("#2196F3"))
+
+        btnConfirm.setOnClickListener {
+            val id = etId.text.toString().trim()
+            val idCard = etIdCard.text.toString().trim()
+            val phone = etPhone.text.toString().trim()
+
+            // 1. 本地初步校验（不通过时不关弹窗）
+            if (id.isEmpty() || phone.length != 11 || (idCard.length != 15 && idCard.length != 18)) {
+                Toast.makeText(this, "输入格式有误，请检查学号、身份证或手机号", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // 2. 开始联网核验
+            btnConfirm.isEnabled = false
+            btnConfirm.text = "核验中..."
+
+            val realUrl = "https://jiaowu.sicau.edu.cn/jiaoshi/bangong/mima_cha.asp"
+            val body = FormBody.Builder(java.nio.charset.Charset.forName("GB2312"))
+                .add("password1", id).add("lb", "S").add("password2", idCard).add("password3", phone).add("submit1", "查询")
+                .build()
+
+            val request = Request.Builder().url(realUrl).post(body)
+                .addHeader("Referer", "https://jiaowu.sicau.edu.cn/web/web/web/Looking_pwd.htm").build()
+
+            myClient.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: java.io.IOException) {
+                    runOnUiThread {
+                        Toast.makeText(this@MainActivity, "网络异常，请重试", Toast.LENGTH_SHORT).show()
+                        btnConfirm.isEnabled = true
+                        btnConfirm.text = "立即核验"
+                    }
+                }
+
+                override fun onResponse(call: Call, response: Response) {
+                    val html = decodeGb2312(response)
+                    val doc = org.jsoup.Jsoup.parse(html)
+
+                    // 1. 精准提取报错信息
+                    val errorFromScript = if (html.contains("alert('")) html.substringAfter("alert('").substringBefore("')") else ""
+                    val errorFromFont = doc.select("font[color=red]").text().trim()
+                    val rawReason = when {
+                        errorFromScript.isNotEmpty() -> errorFromScript
+                        errorFromFont.isNotEmpty() -> errorFromFont
+                        else -> doc.text().take(60)
+                    }
+
+                    runOnUiThread {
+                        fun showPrettyResult(isSuccess: Boolean, message: String) {
+                            val themeColor = if (isSuccess) Color.parseColor("#4CAF50") else Color.parseColor("#F44336")
+
+                            // 外层容器：纯白圆角卡片
+                            val resultView = LinearLayout(this@MainActivity).apply {
+                                orientation = LinearLayout.VERTICAL
+                                gravity = Gravity.CENTER
+                                setPadding(60, 80, 60, 60)
+                                background = GradientDrawable().apply {
+                                    setColor(Color.WHITE)
+                                    cornerRadius = 60f
+                                }
+                            }
+
+                            // 🌟 自绘制图标：圆形背景 + 文字（替代丑丑的 Emoji）
+                            val iconFrame = FrameLayout(this@MainActivity).apply {
+                                layoutParams = LinearLayout.LayoutParams(160, 160).apply { setMargins(0, 0, 0, 40) }
+                                background = GradientDrawable().apply {
+                                    shape = GradientDrawable.OVAL
+                                    setColor(themeColor)
+                                }
+                            }
+                            val tvIconInner = TextView(this@MainActivity).apply {
+                                text = if (isSuccess) "✓" else "!" // 简洁的符号
+                                textSize = 32f
+                                setTextColor(Color.WHITE)
+                                gravity = Gravity.CENTER
+                                setTypeface(null, Typeface.BOLD)
+                            }
+                            iconFrame.addView(tvIconInner)
+
+                            // 状态标题
+                            val tvStatus = TextView(this@MainActivity).apply {
+                                text = if (isSuccess) "核验成功" else "核验失败"
+                                textSize = 19f
+                                setTextColor(Color.BLACK)
+                                setTypeface(null, Typeface.BOLD)
+                                setPadding(0, 0, 0, 15)
+                            }
+
+                            // 描述文字
+                            val tvDesc = TextView(this@MainActivity).apply {
+                                text = message
+                                textSize = 14f
+                                setTextColor(Color.parseColor("#757575"))
+                                gravity = Gravity.CENTER
+                                setLineSpacing(8f, 1f)
+                            }
+
+                            resultView.addView(iconFrame)
+                            resultView.addView(tvStatus)
+                            resultView.addView(tvDesc)
+
+                            // 🌟 增加一个优雅的关闭按钮（仅失败时显示）
+                            if (!isSuccess) {
+                                val btnClose = TextView(this@MainActivity).apply {
+                                    text = "返回修改"
+                                    setTextColor(themeColor)
+                                    textSize = 15f
+                                    setPadding(0, 40, 0, 0)
+                                    setTypeface(null, Typeface.BOLD)
+                                    setOnClickListener { /* 弹窗会自动随点击消失 */ }
+                                }
+                                resultView.addView(btnClose)
+                            }
+
+                            val resDialog = androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                                .setView(resultView)
+                                .create()
+
+                            resDialog.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(Color.TRANSPARENT))
+                            resDialog.show()
+
+                            if (isSuccess) {
+                                resultView.postDelayed({
+                                    resDialog.dismiss()
+                                    dialog.dismiss()
+                                }, 2000)
+                            } else {
+                                // 失败时点击任何地方都关闭反馈框，回到输入框
+                                resultView.setOnClickListener { resDialog.dismiss() }
+                            }
+                        }
+
+                        // --- 逻辑判断分水岭 ---
+                        if (html.contains("成功") || html.contains("匹配") || html.contains("window.close")) {
+                            showPrettyResult(true, "核验成功！新密码将通过短信发送，请注意查收。")
+                        } else {
+                            btnConfirm.isEnabled = true
+                            btnConfirm.text = "立即核验"
+
+                            val finalReason = if (rawReason.isBlank()) "信息核验失败，请检查输入" else rawReason
+                            showPrettyResult(false, finalReason)
+
+                            tvHint.text = "⚠️ 核验失败：$finalReason"
+                            tvHint.setTextColor(Color.parseColor("#F44336"))
+                        }
+                    }
+                }
+            })
+        }
     }
 
-    private fun doLookingPwd(id: String, idCard: String, phone: String) {
-        updateStatus("正在通过官方接口核验身份...")
+    // 🌟 这里的参数增加了 dialog, btnConfirm 和 tvHint
+    private fun doLookingPwd(id: String, idCard: String, phone: String,
+                             dialog: androidx.appcompat.app.AlertDialog,
+                             btnConfirm: Button,
+                             tvHint: TextView) {
 
-        // 🌟 核心修复：使用你抓包得到的准确 URL
+        btnConfirm.isEnabled = false
+        btnConfirm.text = "核验中..."
+
         val realUrl = "https://jiaowu.sicau.edu.cn/jiaoshi/bangong/mima_cha.asp"
-
-        // 构造请求体，保持 GB2312 编码以适配老旧服务器
-        val body = FormBody.Builder(Charset.forName("GB2312"))
-            .add("password1", id)     // 学号
-            .add("lb", "S")           // 身份：学生
-            .add("password2", idCard) // 身份证
-            .add("password3", phone)  // 电话
-            .add("submit1", "查询")    // 模拟点击查询按钮
+        val body = FormBody.Builder(java.nio.charset.Charset.forName("GB2312"))
+            .add("password1", id)
+            .add("lb", "S")
+            .add("password2", idCard)
+            .add("password3", phone)
+            .add("submit1", "查询")
             .build()
 
         val request = Request.Builder()
             .url(realUrl)
             .post(body)
-            // 🌟 伪装：Referer 必须指向那个 .htm 页面，否则会被防盗链拦截
             .addHeader("Referer", "https://jiaowu.sicau.edu.cn/web/web/web/Looking_pwd.htm")
-            .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
             .build()
 
         myClient.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) {
-                updateStatus("网络连接异常，请检查网络")
+            override fun onFailure(call: Call, e: java.io.IOException) {
+                runOnUiThread {
+                    btnConfirm.isEnabled = true
+                    btnConfirm.text = "立即核验"
+                    Toast.makeText(this@MainActivity, "网络异常", Toast.LENGTH_SHORT).show()
+                }
             }
 
             override fun onResponse(call: Call, response: Response) {
-                val html = decodeGb2312(response) //
+                val html = decodeGb2312(response)
                 val doc = org.jsoup.Jsoup.parse(html)
-                val resultText = doc.text()
+
+                // 抓取报错原因
+                val errorMsg = if (html.contains("alert('")) {
+                    html.substringAfter("alert('").substringBefore("')")
+                } else {
+                    doc.select("font[color=red]").text().trim()
+                }
 
                 runOnUiThread {
-                    // 根据返回的 HTML 特征判断结果
-                    if (resultText.contains("成功") || resultText.contains("匹配") || html.contains("window.close")) {
-                        Toast.makeText(this@MainActivity, "✅ 验证通过！密码将通过短信发送，请注意查收", Toast.LENGTH_LONG).show()
-                    } else {
-                        // 如果失败，显示教务处的具体报错原因
-                        val errorMsg = if (resultText.length > 80) resultText.take(80) + "..." else resultText
+                    if (html.contains("成功") || html.contains("匹配") || html.contains("window.close")) {
+                        // ✅ 成功：弹出成功提示并销毁输入框
                         androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
-                            .setTitle("找回结果")
-                            .setMessage(errorMsg)
-                            .setPositiveButton("确定", null)
+                            .setTitle("验证通过")
+                            .setMessage("核验成功！密码将通过短信发送，请查收。")
+                            .setPositiveButton("好", null).show()
+                        dialog.dismiss()
+                    } else {
+                        // ❌ 失败：显示原因，不销毁输入框
+                        val finalReason = if (errorMsg.isBlank()) "信息核验未通过" else errorMsg
+
+                        tvHint.text = "⚠️ 核验失败：$finalReason"
+                        tvHint.setTextColor(Color.RED)
+
+                        androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                            .setTitle("核验未通过")
+                            .setMessage("教务处反馈：$finalReason")
+                            .setPositiveButton("返回修改", null)
                             .show()
+
+                        btnConfirm.isEnabled = true
+                        btnConfirm.text = "立即核验"
                     }
                 }
             }
@@ -2604,6 +2845,7 @@ class MainActivity : AppCompatActivity() {
             .setCategory(androidx.core.app.NotificationCompat.CATEGORY_REMINDER)
             .setContentIntent(pendingIntent) // 🌟 核心修改：设置点击意图
             .setOnlyAlertOnce(true)
+
 
         try {
             val manager = androidx.core.app.NotificationManagerCompat.from(this)
