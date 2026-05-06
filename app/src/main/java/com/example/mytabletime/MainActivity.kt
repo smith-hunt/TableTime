@@ -210,6 +210,81 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // --- 🌟 核心：多巴胺 UI 主题色彩系统 (支持深色模式) ---
+    private fun isDarkMode(): Boolean {
+        val mode = resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        return mode == android.content.res.Configuration.UI_MODE_NIGHT_YES
+    }
+
+    private fun getThemeColor(type: String): Int {
+        val isDark = isDarkMode()
+        return when (type) {
+            "bg" -> if (isDark) Color.parseColor("#121212") else Color.parseColor("#F5F7FA")
+            "card" -> if (isDark) Color.parseColor("#1E1E1E") else Color.WHITE
+            "text_main" -> if (isDark) Color.parseColor("#E0E0E0") else Color.parseColor("#333333")
+            "text_sub" -> if (isDark) Color.parseColor("#888888") else Color.parseColor("#999999")
+            "divider" -> if (isDark) Color.parseColor("#333333") else Color.parseColor("#EEEEEE")
+            "accent" -> Color.parseColor("#2196F3") // 保持经典多巴胺蓝
+            else -> Color.TRANSPARENT
+        }
+    }
+
+    private var loadingOverlay: FrameLayout? = null
+
+    private fun showDopamineLoading(message: String = "正在努力抓取...") {
+        runOnUiThread {
+            if (loadingOverlay != null) return@runOnUiThread
+            val root = findViewById<ViewGroup>(android.R.id.content)
+            loadingOverlay = FrameLayout(this).apply {
+                setBackgroundColor(Color.parseColor("#AA000000")) // 半透明遮罩
+                isClickable = true
+                isFocusable = true
+            }
+
+            val container = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = Gravity.CENTER
+            }
+
+            // 🌟 核心：呼吸感脉冲圆圈
+            val pulseView = View(this).apply {
+                layoutParams = LinearLayout.LayoutParams(150, 150)
+                background = GradientDrawable().apply {
+                    shape = GradientDrawable.OVAL
+                    setColor(getThemeColor("accent"))
+                }
+            }
+
+            val anim = android.view.animation.AlphaAnimation(0.3f, 1.0f).apply {
+                duration = 800
+                repeatCount = android.view.animation.Animation.INFINITE
+                repeatMode = android.view.animation.Animation.REVERSE
+            }
+            pulseView.startAnimation(anim)
+
+            val tv = TextView(this).apply {
+                text = message
+                setTextColor(Color.WHITE)
+                setPadding(0, 40, 0, 0)
+                textSize = 14f
+            }
+
+            container.addView(pulseView)
+            container.addView(tv)
+            loadingOverlay?.addView(container, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER))
+            root.addView(loadingOverlay)
+        }
+    }
+
+    private fun hideDopamineLoading() {
+        runOnUiThread {
+            loadingOverlay?.let {
+                (it.parent as? ViewGroup)?.removeView(it)
+                loadingOverlay = null
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -219,6 +294,7 @@ class MainActivity : AppCompatActivity() {
         checkNotificationPermission()
         // 1. 解决底部系统导航栏遮挡 UI 问题
         val mainRoot = findViewById<View>(R.id.main_layout)
+        mainRoot.setBackgroundColor(getThemeColor("bg")) // 🌟 适配深色模式背景
         androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(mainRoot) { v, insets ->
             val systemBars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
@@ -312,7 +388,7 @@ class MainActivity : AppCompatActivity() {
             override fun onPageSelected(position: Int) {
                 val weekNum = position + 1
                 tvTopWeek.text = if (weekNum == currentWeek) "第 $weekNum 周(本周)" else "第 $weekNum 周"
-                tvTopWeek.setTextColor(if (weekNum == currentWeek) Color.parseColor("#2196F3") else Color.GRAY)
+                tvTopWeek.setTextColor(if (weekNum == currentWeek) getThemeColor("accent") else getThemeColor("text_sub"))
 
                 // 🌟 核心修复：新页面加载后，强制同步之前的滚动高度
                 viewPager.post {
@@ -388,7 +464,7 @@ class MainActivity : AppCompatActivity() {
             // 更新底部 5 个 Tab 颜色
             val texts = arrayOf(tabKbText, tabExamText, tabGradeText, tabCreditText, tabAccountText)
             texts.forEachIndexed { i, tv ->
-                tv.setTextColor(if (i == index) Color.parseColor("#2196F3") else Color.GRAY)
+                tv.setTextColor(if (i == index) getThemeColor("accent") else getThemeColor("text_sub"))
                 tv.setTypeface(null, if (i == index) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL)
             }
         }
@@ -456,6 +532,7 @@ class MainActivity : AppCompatActivity() {
             val u = uInput.text.toString()
             val p = pInput.text.toString()
             if (u.isNotEmpty()) {
+                showDopamineLoading("正在安全登录...")
                 updateStatus("正在初始化登录...")
                 step1FetchTokens(u, p)
             }
@@ -509,14 +586,21 @@ class MainActivity : AppCompatActivity() {
             .addHeader("Referer", "https://jiaowu.sicau.edu.cn/jiaoshi/bangong/index1.asp")
             .build()
 
+        showDopamineLoading("正在抓取考试安排...")
         updateStatus("正在抓取考试安排...")
 
         myClient.newCall(request).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { updateStatus("抓取考试失败") }
+            override fun onFailure(call: Call, e: IOException) { 
+                hideDopamineLoading()
+                updateStatus("抓取考试失败") 
+            }
             override fun onResponse(call: Call, response: Response) {
                 val html = decodeGb2312(response)
                 val doc = Jsoup.parse(html)
-                val table = doc.select("table").lastOrNull() ?: return
+                val table = doc.select("table").lastOrNull() ?: run {
+                    hideDopamineLoading()
+                    return
+                }
                 val rows = table.select("tr")
                 val sb = StringBuilder()
 
@@ -531,6 +615,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
+                    hideDopamineLoading()
                     findViewById<TextView>(R.id.tv_exam_content).text =
                         if (sb.isEmpty()) "目前没有查询到正考安排。" else sb.toString()
                     updateStatus("考试安排更新成功")
@@ -540,6 +625,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun fetchGradeData(targetUrl: String, label: String) {
+        showDopamineLoading("正在同步 $label...")
         updateStatus("正在拉取 $label 数据...")
         val container = findViewById<LinearLayout>(R.id.grade_container)
         container.removeAllViews() // 清空旧数据
@@ -552,6 +638,7 @@ class MainActivity : AppCompatActivity() {
 
         myClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                hideDopamineLoading()
                 updateStatus("网络连接失败，请检查VPN")
             }
 
@@ -614,6 +701,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
+                    hideDopamineLoading()
                     if (gradeList.isEmpty()) {
                         updateStatus("暂无数据。请确认是否已评教或Session过期。")
                         // 调试：如果出不来，可以在此处 Log.d("DEBUG", html) 查看源码
@@ -666,7 +754,7 @@ class MainActivity : AppCompatActivity() {
                 lp.setMargins(0, 0, 0, 30)
                 layoutParams = lp
                 background = GradientDrawable().apply {
-                    setColor(Color.WHITE)
+                    setColor(getThemeColor("card"))
                     cornerRadius = 30f
                 }
                 elevation = 4f
@@ -697,20 +785,20 @@ class MainActivity : AppCompatActivity() {
                 layoutParams = p
             }
             val tvName = TextView(this).apply {
-                text = g.name; textSize = 15f; setTextColor(Color.parseColor("#333333"))
+                text = g.name; textSize = 15f; setTextColor(getThemeColor("text_main"))
                 setTypeface(null, android.graphics.Typeface.BOLD); setSingleLine(true)
                 ellipsize = android.text.TextUtils.TruncateAt.END
                 layoutParams = LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f)
             }
             val tvGpa = TextView(this).apply {
-                text = " [绩点 ${g.gpa}]"; textSize = 13f; setTextColor(Color.parseColor("#2196F3"))
+                text = " [绩点 ${g.gpa}]"; textSize = 13f; setTextColor(getThemeColor("accent"))
                 layoutParams = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
             }
             leftContainer.addView(tvName); leftContainer.addView(tvGpa)
             topRow.addView(tvScore); topRow.addView(leftContainer)
             val tvDetail = TextView(this).apply {
                 this.text = "学分: ${g.credit}  |  ${g.nature}"
-                this.setTextSize(12f); this.setTextColor(Color.parseColor("#999999"))
+                this.setTextSize(12f); this.setTextColor(getThemeColor("text_sub"))
                 setPadding(0, 10, 0, 0)
             }
             card.addView(topRow); card.addView(tvDetail)
@@ -758,7 +846,7 @@ class MainActivity : AppCompatActivity() {
             lp.setMargins(0, 0, 0, 30)
             setLayoutParams(lp)
             background = GradientDrawable().apply {
-                setColor(Color.WHITE)
+                setColor(getThemeColor("card"))
                 setCornerRadius(30f)
             }
             setElevation(4f)
@@ -784,7 +872,7 @@ class MainActivity : AppCompatActivity() {
             setText(details)
             setTextSize(15f)
             setLineSpacing(15f, 1.0f)
-            setTextColor(Color.parseColor("#607D8B")) // 浅灰蓝，显高级
+            setTextColor(getThemeColor("text_sub")) // 浅灰蓝，显高级
         }
 
         card.addView(tvRank)
@@ -799,8 +887,10 @@ class MainActivity : AppCompatActivity() {
             .addHeader("Referer", "https://jiaowu.sicau.edu.cn/xuesheng/chengji/chengji/chengji.asp")
             .build()
 
+        showDopamineLoading("正在查询排名...")
         myClient.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                hideDopamineLoading()
                 runOnUiThread { updateStatus("查询失败") }
             }
 
@@ -824,6 +914,7 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 runOnUiThread {
+                    hideDopamineLoading()
                     if (dataRowText.isNotEmpty()) {
                         renderRankingSummary(dataRowText)
                     } else {
@@ -925,7 +1016,7 @@ class MainActivity : AppCompatActivity() {
                 lp.setMargins(0, 0, 0, 36)
                 setLayoutParams(lp)
                 background = GradientDrawable().apply {
-                    setColor(Color.WHITE)
+                    setColor(getThemeColor("card"))
                     setCornerRadius(48f)
                 }
                 setElevation(4f)
@@ -945,14 +1036,10 @@ class MainActivity : AppCompatActivity() {
                 p.addRule(RelativeLayout.CENTER_VERTICAL)
                 setLayoutParams(p)
                 val progressVal = cat.progress.toDoubleOrNull() ?: 0.0
-                setTextColor(Color.parseColor(when {
-                    progressVal >= 90 -> "#4CAF50"
-                    progressVal >= 60 -> "#1A237E"
-                    else -> "#FFA726"
-                }))
+                setTextColor(getThemeColor("accent"))
             }
             val tvName = TextView(this).apply {
-                setText(cat.name); setTextSize(15f); setTextColor(Color.parseColor("#1A237E"))
+                setText(cat.name); setTextSize(15f); setTextColor(getThemeColor("text_main"))
                 setTypeface(null, android.graphics.Typeface.BOLD); setSingleLine(true)
                 setEllipsize(android.text.TextUtils.TruncateAt.END)
                 val p = RelativeLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT)
@@ -968,7 +1055,7 @@ class MainActivity : AppCompatActivity() {
                 setMax(100)
                 setProgress(cat.progress.toDoubleOrNull()?.toInt() ?: 0)
                 setProgressTintList(ColorStateList.valueOf(tvPercent.currentTextColor))
-                setProgressBackgroundTintList(ColorStateList.valueOf(Color.parseColor("#ECEFF1")))
+                setProgressBackgroundTintList(ColorStateList.valueOf(getThemeColor("divider")))
             }
 
             val tvData = TextView(this).apply {
@@ -1007,30 +1094,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showSemesterQueryDialog() {
-        if (mySemesterData.isEmpty()) {
-            Toast.makeText(this, "请先在账号页登录并等待学期加载", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // 动态在代码里创建一个 Spinner
-        val spinner = Spinner(this)
-        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, mySemesterData)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        spinner.adapter = adapter
-        spinner.setPadding(60, 40, 60, 40) // 增加点间距好看些
-
-        AlertDialog.Builder(this)
-            .setTitle("选择查询学期")
-            .setView(spinner) // 把这个下拉框塞进弹窗里
-            .setPositiveButton("开始查询") { _, _ ->
-                val selectedSem = spinner.selectedItem?.toString()
-                if (selectedSem != null) {
-                    updateStatus("正在查询 $selectedSem 的课表...")
-                    step5SetSemContext(selectedSem) // 调用你的查询函数
-                }
+        try {
+            if (mySemesterData.isEmpty()) {
+                Toast.makeText(this, "请先在账号页登录并等待学期加载", Toast.LENGTH_SHORT).show()
+                return
             }
-            .setNegativeButton("取消", null)
-            .show()
+
+            // 动态在代码里创建一个 Spinner
+            val spinner = Spinner(this)
+            val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, mySemesterData)
+            adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+            spinner.adapter = adapter
+            spinner.setPadding(60, 40, 60, 40) // 增加点间距好看些
+
+            AlertDialog.Builder(this)
+                .setTitle("选择查询学期")
+                .setView(spinner) // 把这个下拉框塞进弹窗里
+                .setPositiveButton("开始查询") { _, _ ->
+                    try {
+                        val selectedSem = spinner.selectedItem?.toString()
+                        if (!selectedSem.isNullOrEmpty()) {
+                            updateStatus("正在查询 $selectedSem 的课表...")
+                            step5SetSemContext(selectedSem) // 调用你的查询函数
+                        } else {
+                            Toast.makeText(this, "未选择有效学期", Toast.LENGTH_SHORT).show()
+                        }
+                    } catch (e: Exception) {
+                        Log.e("QueryError", "选择学期时发生错误: ${e.message}")
+                        Toast.makeText(this, "查询启动失败，请重试", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton("取消", null)
+                .show()
+        } catch (e: Exception) {
+            Log.e("DialogError", "显示查询弹窗失败: ${e.message}")
+            Toast.makeText(this, "无法打开查询窗口", Toast.LENGTH_SHORT).show()
+        }
     }
 
 
@@ -1112,7 +1211,10 @@ class MainActivity : AppCompatActivity() {
     private fun step1FetchTokens(u: String, p: String) {
         val url = "https://jiaowu.sicau.edu.cn/web/web/web/index.asp"
         myClient.newCall(Request.Builder().url(url).build()).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { updateStatus("网络故障") }
+            override fun onFailure(call: Call, e: IOException) { 
+                hideDopamineLoading()
+                updateStatus("网络故障") 
+            }
             override fun onResponse(call: Call, response: Response) {
                 val html = decodeGb2312(response)
                 val myDoc = Jsoup.parse(html)
@@ -1121,6 +1223,9 @@ class MainActivity : AppCompatActivity() {
                 if (mySignValue.isNotEmpty()) {
                     updateStatus("正在登录...")
                     step2DoLogin(u, p, mySignValue, myHourValue)
+                } else {
+                    hideDopamineLoading()
+                    updateStatus("令牌获取失败")
                 }
             }
         })
@@ -1145,6 +1250,7 @@ class MainActivity : AppCompatActivity() {
 
         myClient.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
+                hideDopamineLoading()
                 updateStatus("网络连接异常")
             }
 
@@ -1186,6 +1292,7 @@ class MainActivity : AppCompatActivity() {
                 } else {
                     // 🌟 2. 登录未成功，根据你的发现精准提示
                     runOnUiThread {
+                        hideDopamineLoading()
                         when {
                             // 识别：原密码正确，但系统要求输入短信验证码
                             html.contains("短信验证码") || html.contains("尾号") -> {
@@ -1226,16 +1333,16 @@ class MainActivity : AppCompatActivity() {
                 val myDoc = Jsoup.parse(html)
                 val semesterLinks = myDoc.select("a[href*=xueqi=]")
 
-                mySemesterData.clear()
-                for (linkElement in semesterLinks) {
-                    mySemesterData.add(linkElement.text().trim())
-                }
-
                 runOnUiThread {
+                    mySemesterData.clear()
+                    for (linkElement in semesterLinks) {
+                        mySemesterData.add(linkElement.text().trim())
+                    }
                     // 🌟 核心修改：如果是静默模式，就只打 Log；如果不是，才弹窗提示！
                     if (isSilent) {
                         Log.d("AppStatus", "后台静默抓取学期完成")
                     } else {
+                        hideDopamineLoading()
                         updateStatus("✅ 学期抓取成功，请点击右上角[+]查询课表")
                     }
                 }
@@ -1244,20 +1351,43 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun step5SetSemContext(sem: String) {
-        val setUrl = "https://jiaowu.sicau.edu.cn/xuesheng/gongxuan/gongxuan/xszhinan.asp?title_id1=9&xueqi=$sem"
-        val kbUrl = "https://jiaowu.sicau.edu.cn/xuesheng/gongxuan/gongxuan/kbbanji.asp?title_id1=4"
-        myClient.newCall(Request.Builder().url(setUrl).build()).enqueue(object : Callback {
-            override fun onResponse(call: Call, response: Response) {
-                val kbReq = Request.Builder().url(kbUrl).addHeader("Referer", setUrl).build()
-                myClient.newCall(kbReq).enqueue(object : Callback {
-                    override fun onResponse(call: Call, response: Response) {
-                        runOnUiThread { parseFinalKb(decodeGb2312(response)) }
+        try {
+            val setUrl = "https://jiaowu.sicau.edu.cn/xuesheng/gongxuan/gongxuan/xszhinan.asp?title_id1=9&xueqi=$sem"
+            val kbUrl = "https://jiaowu.sicau.edu.cn/xuesheng/gongxuan/gongxuan/kbbanji.asp?title_id1=4"
+            myClient.newCall(Request.Builder().url(setUrl).build()).enqueue(object : Callback {
+                override fun onResponse(call: Call, response: Response) {
+                    try {
+                        val kbReq = Request.Builder().url(kbUrl).addHeader("Referer", setUrl).build()
+                        myClient.newCall(kbReq).enqueue(object : Callback {
+                            override fun onResponse(call: Call, response: Response) {
+                                val decodedHtml = decodeGb2312(response)
+                                runOnUiThread {
+                                    hideDopamineLoading()
+                                    if (!isFinishing && !isDestroyed) {
+                                        parseFinalKb(decodedHtml)
+                                    }
+                                }
+                            }
+                            override fun onFailure(call: Call, e: IOException) {
+                                hideDopamineLoading()
+                                runOnUiThread { updateStatus("课表内容抓取失败") }
+                            }
+                        })
+                    } catch (e: Exception) {
+                        hideDopamineLoading()
+                        Log.e("QueryError", "二级请求发起失败: ${e.message}")
+                        runOnUiThread { updateStatus("查询链路中断") }
                     }
-                    override fun onFailure(call: Call, e: IOException) {}
-                })
-            }
-            override fun onFailure(call: Call, e: IOException) {}
-        })
+                }
+                override fun onFailure(call: Call, e: IOException) {
+                    hideDopamineLoading()
+                    runOnUiThread { updateStatus("学期上下文设置失败") }
+                }
+            })
+        } catch (e: Exception) {
+            Log.e("QueryError", "查询流程启动异常: ${e.message}")
+            updateStatus("查询功能暂不可用")
+        }
     }
 
 
@@ -1437,68 +1567,70 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun parseFinalKb(html: String) {
-        val myDoc = Jsoup.parse(html)
-        val detailTable = myDoc.select("table").lastOrNull() ?: return
-        val rows = detailTable.select("tr")
-        val rawList = mutableListOf<Course>()
-        val regex = """(\d)-(\d+),(\d+)-(\d+)(\(.*\))?""".toRegex()
+        try {
+            val myDoc = Jsoup.parse(html)
+            val detailTable = myDoc.select("table").lastOrNull() ?: run {
+                updateStatus("未找到课表数据表格")
+                return
+            }
+            val rows = detailTable.select("tr")
+            val rawList = mutableListOf<Course>()
+            val regex = """(\d)-(\d+),(\d+)-(\d+)(\(.*\))?""".toRegex()
 
-        for (i in 1 until rows.size) {
-            val tds = rows[i].select("td")
-            if (tds.size < 12) continue
+            for (i in 1 until rows.size) {
+                val tds = rows[i].select("td")
+                if (tds.size < 12) continue
 
-            val name = tds[1].text().trim()
-            val rangeWeek = tds[3].text().trim() // 原始周次如 "1-16"
-            val roomList = tds[4].html().split("<br>").map { Jsoup.parse(it).text().trim() }.filter { it.isNotEmpty() }
-            val timeParts = tds[5].html().split("<br>").map { Jsoup.parse(it).text().trim() }.filter { it.isNotEmpty() }
-            val teacherRaw = tds[11].text().trim()
-            val teacher = teacherRaw.split("\\s+".toRegex()).filter { it.isNotBlank() }.joinToString("/")
+                val name = tds[1].text().trim()
+                val rangeWeek = tds[3].text().trim() // 原始周次如 "1-16"
+                val roomList = tds[4].html().split("<br>").map { Jsoup.parse(it).text().trim() }.filter { it.isNotEmpty() }
+                val timeParts = tds[5].html().split("<br>").map { Jsoup.parse(it).text().trim() }.filter { it.isNotEmpty() }
+                val teacherRaw = tds[11].text().trim()
+                val teacher = teacherRaw.split("\\s+".toRegex()).filter { it.isNotBlank() }.joinToString("/")
 
-            for (idx in timeParts.indices) {
-                val timeStr = timeParts[idx]
-                val matches = regex.findAll(timeStr)
-                val currentRoom = if (idx < roomList.size) roomList[idx] else (roomList.firstOrNull() ?: "")
+                for (idx in timeParts.indices) {
+                    val timeStr = timeParts[idx]
+                    val matches = regex.findAll(timeStr)
+                    val currentRoom = if (idx < roomList.size) roomList[idx] else (roomList.firstOrNull() ?: "")
 
-                for (match in matches) {
-                    val d = match.groupValues[1].toInt()
-                    val s = match.groupValues[2].toInt()
-                    val e = match.groupValues[4].toInt()
-                    val suffix = match.groupValues[5] // 拿到 "(单)" 之类的
+                    for (match in matches) {
+                        if (match.groupValues.size >= 5) {
+                            val d = match.groupValues[1].toInt()
+                            val s = match.groupValues[2].toInt()
+                            val e = match.groupValues[4].toInt()
+                            val suffix = match.groupValues[5] // 拿到 "(单)" 之类的
 
-                    // 💡 必须调用这个函数，把字符串转成 MutableList<Int>
-                    val myWeekList = convertWeeksToList(rangeWeek, suffix)
-
-                    // 💡 这里最后一位传 myWeekList，报错就会消失
-                    rawList.add(Course(name, teacher, currentRoom, d, s, e, myWeekList))
+                            val myWeekList = convertWeeksToList(rangeWeek, suffix)
+                            rawList.add(Course(name, teacher, currentRoom, d, s, e, myWeekList))
+                        }
+                    }
                 }
             }
-        }
 
-        rawList.sortWith(compareBy({ it.day }, { it.startSection }))
+            rawList.sortWith(compareBy({ it.day }, { it.startSection }))
 
-        val mergedList = mutableListOf<Course>()
-        for (c in rawList) {
-            val last = mergedList.lastOrNull()
-            // 合并逻辑：如果时间连续且名字教室一样
-            if (last != null && last.name == c.name && last.day == c.day && last.room == c.room && last.endSection + 1 >= c.startSection) {
-                last.endSection = maxOf(last.endSection, c.endSection)
-                // 💡 核心修改：合并两个时间段的周次（去重）
-                val newWeeks = (last.weekList + c.weekList).distinct().toMutableList()
-                last.weekList = newWeeks
-            } else {
-                mergedList.add(c)
+            val mergedList = mutableListOf<Course>()
+            for (c in rawList) {
+                val last = mergedList.lastOrNull()
+                if (last != null && last.name == c.name && last.day == c.day && last.room == c.room && last.endSection + 1 >= c.startSection) {
+                    last.endSection = maxOf(last.endSection, c.endSection)
+                    val newWeeks = (last.weekList + c.weekList).distinct().toMutableList()
+                    last.weekList = newWeeks
+                } else {
+                    mergedList.add(c)
+                }
             }
-        }
 
-        runOnUiThread {
-            fetchedList.clear()
-            fetchedList.addAll(mergedList)
-
-            // 保存到本地
-            saveCoursesToLocal(fetchedList)
-
-            viewPager.adapter?.notifyDataSetChanged()
-            updateStatus("✅ 课表同步成功")
+            runOnUiThread {
+                fetchedList.clear()
+                fetchedList.addAll(mergedList)
+                saveCoursesToLocal(fetchedList)
+                viewPager.adapter?.notifyDataSetChanged()
+                updateStatus("✅ 课表同步成功")
+            }
+        } catch (e: Exception) {
+            Log.e("ParseError", "解析课表时崩溃: ${e.message}")
+            updateStatus("课表内容解析失败")
         }
     }
 
@@ -1593,10 +1725,29 @@ class MainActivity : AppCompatActivity() {
     private val autoScrollHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private var autoScrollRunnable: Runnable? = null
 
+    private var currentScale = 1.0f
+
     private fun renderSingleWeek(grid: GridLayout, weekIdx: Int) {
         grid.removeAllViews()
         grid.rowCount = 11
         grid.columnCount = 8
+
+        // 🌟 核心增强：捏合缩放支持
+        val scaleDetector = android.view.ScaleGestureDetector(this, object : android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            override fun onScale(detector: android.view.ScaleGestureDetector): Boolean {
+                currentScale *= detector.scaleFactor
+                currentScale = currentScale.coerceIn(0.8f, 2.0f)
+                grid.scaleX = currentScale
+                grid.scaleY = currentScale
+                return true
+            }
+        })
+        
+        // 注意：这里由于 Grid 在 ScrollView 内部，我们需要特殊处理触摸
+        grid.setOnTouchListener { _, event ->
+            scaleDetector.onTouchEvent(event)
+            false 
+        }
 
         val sW = resources.displayMetrics.widthPixels
         val labelW = 70
@@ -1633,7 +1784,7 @@ class MainActivity : AppCompatActivity() {
                 val tvW = TextView(this).apply {
                     setText("$weekIdx\n周")
                     setTextSize(10f)
-                    setTextColor(Color.parseColor("#757575")) // 强制深灰
+                    setTextColor(getThemeColor("text_main"))
                     setGravity(Gravity.CENTER)
                 }
                 box.addView(tvW)
@@ -1646,7 +1797,7 @@ class MainActivity : AppCompatActivity() {
                 val tvD = TextView(this).apply {
                     setText(dStr)
                     setTextSize(10f)
-                    setTextColor(Color.parseColor("#999999")) // 强制灰色
+                    setTextColor(getThemeColor("text_sub"))
                     setGravity(Gravity.CENTER)
                     setLayoutParams(LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
                 }
@@ -1654,7 +1805,7 @@ class MainActivity : AppCompatActivity() {
                 val tvDay = TextView(this).apply {
                     setText(weekNames[i])
                     setTextSize(13f)
-                    setTextColor(Color.BLACK) // 🌟 强制黑色，防止隐身
+                    setTextColor(getThemeColor("text_main"))
                     setTypeface(null, android.graphics.Typeface.BOLD)
                     setGravity(Gravity.CENTER)
                     setLayoutParams(LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
@@ -1668,9 +1819,9 @@ class MainActivity : AppCompatActivity() {
                 val todayStr = "${today.get(Calendar.MONTH) + 1}.${today.get(Calendar.DAY_OF_MONTH)}"
                 if (dStr == todayStr && semesterStartMillis != 0L) {
                     box.setBackground(GradientDrawable().apply {
-                        // 🌟 改为纯蓝色背景，去掉边框
-                        setColor(Color.parseColor("#2196F3"))
-                        cornerRadius = 20f // 圆角调大一点更灵动
+                        // 🌟 改为主题高亮色
+                        setColor(getThemeColor("accent"))
+                        cornerRadius = 20f 
                     })
                     // 同时也把里面的文字颜色改了（需要遍历 box 里的 TextView）
                     for (idx in 0 until box.childCount) {
@@ -1711,7 +1862,7 @@ class MainActivity : AppCompatActivity() {
             val tvIndex = TextView(this).apply {
                 text = "$i"
                 textSize = 13f
-                setTextColor(Color.parseColor("#333333")) // 深灰色，比纯黑高级
+                setTextColor(getThemeColor("text_main"))
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 gravity = Gravity.CENTER
             }
@@ -1720,7 +1871,7 @@ class MainActivity : AppCompatActivity() {
             val tvTime = TextView(this).apply {
                 text = timeSlots[i]
                 textSize = 8.5f
-                setTextColor(Color.parseColor("#AAAAAA")) // 浅灰色，作为辅助信息
+                setTextColor(getThemeColor("text_sub"))
                 gravity = Gravity.CENTER
                 setLineSpacing(0f, 0.9f) // 紧凑一点
                 setPadding(0, 2, 0, 0)
@@ -1755,11 +1906,11 @@ class MainActivity : AppCompatActivity() {
             val hue = random.nextInt(360).toFloat()
             // 2. 这里的饱和度和亮度手动固定，保证“多巴胺”浅色质感
             val saturation = 0.5f
-            val lightness = 0.9f
+            val lightness = if (isDarkMode()) 0.25f else 0.9f
 
             // 转换颜色
             val bgInt = androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, saturation, lightness))
-            val textInt = androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, saturation, 0.25f))
+            val textInt = if (isDarkMode()) Color.WHITE else androidx.core.graphics.ColorUtils.HSLToColor(floatArrayOf(hue, saturation, 0.25f))
 
             card.setTextColor(textInt)
             card.textSize = 11f
@@ -1783,6 +1934,12 @@ class MainActivity : AppCompatActivity() {
                 selDay = -1
                 grid.post { renderSingleWeek(grid, weekIdx) }
                 showCourseDetailDialog(c)
+            }
+
+            // 🌟 核心增强：长按卡片快速进入详情/编辑
+            card.setOnLongClickListener {
+                showCourseDetailDialog(c)
+                true
             }
 
             // 设置布局参数
@@ -2028,6 +2185,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+        // 🌟 修正：如果是深色模式，标题背景也调暗一点
+        if (isDarkMode()) {
+            (titleLayout.background as GradientDrawable).setColor(getThemeColor("card"))
+        }
+
         val tvTitle = TextView(this).apply {
             text = c.name
             textSize = 18f
@@ -2063,7 +2225,7 @@ class MainActivity : AppCompatActivity() {
         val tvContent = TextView(this).apply {
             text = infoText
             textSize = 15f
-            setTextColor(Color.parseColor("#666666"))
+            setTextColor(getThemeColor("text_main"))
             setLineSpacing(15f, 1f) // 增加行间距，不拥挤
         }
         contentLayout.addView(tvContent)
@@ -2084,7 +2246,7 @@ class MainActivity : AppCompatActivity() {
 
         // 🌟 核心美化：强制去除系统默认白框，应用自定义大圆角背景
         dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
-            setColor(Color.WHITE)
+            setColor(getThemeColor("card"))
             cornerRadius = 48f // 超大圆角，非常有现代感
         })
 
