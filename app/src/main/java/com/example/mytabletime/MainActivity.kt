@@ -241,6 +241,8 @@ class MainActivity : AppCompatActivity() {
                 isFocusable = true
             }
 
+            val maxTextWidth = (resources.displayMetrics.widthPixels * 0.82f).toInt()
+
             val container = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 gravity = Gravity.CENTER
@@ -265,13 +267,16 @@ class MainActivity : AppCompatActivity() {
             val tv = TextView(this).apply {
                 text = message
                 setTextColor(Color.WHITE)
-                setPadding(0, 40, 0, 0)
+                setPadding(40, 40, 40, 0)
                 textSize = 14f
+                gravity = Gravity.CENTER
+                maxWidth = maxTextWidth
+                layoutParams = LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT)
             }
 
             container.addView(pulseView)
             container.addView(tv)
-            loadingOverlay?.addView(container, FrameLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT, Gravity.CENTER))
+            loadingOverlay?.addView(container, FrameLayout.LayoutParams(maxTextWidth + 80, WRAP_CONTENT, Gravity.CENTER))
             root.addView(loadingOverlay)
         }
     }
@@ -1100,34 +1105,44 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            // 动态在代码里创建一个 Spinner
+            // 前置检测：检查本地是否有登录凭据（Session 可能已过期但至少凭据还在）
+            val savedId = getEncryptedPrefs().getString("student_id", "")
+            if (savedId.isNullOrEmpty()) {
+                Toast.makeText(this, "请先登录后再查询课表", Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            // 使用防御性拷贝，避免异步修改导致 Adapter 崩溃
+            val semList = mySemesterData.toList()
             val spinner = Spinner(this)
-            val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, mySemesterData)
+            val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, semList)
             adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
             spinner.adapter = adapter
-            spinner.setPadding(60, 40, 60, 40) // 增加点间距好看些
+            spinner.setPadding(60, 40, 60, 40)
 
             AlertDialog.Builder(this)
                 .setTitle("选择查询学期")
-                .setView(spinner) // 把这个下拉框塞进弹窗里
-                .setPositiveButton("开始查询") { _, _ ->
+                .setView(spinner)
+                .setPositiveButton("开始查询") { dialog, _ ->
                     try {
                         val selectedSem = spinner.selectedItem?.toString()
                         if (!selectedSem.isNullOrEmpty()) {
+                            // 显示 loading 遮罩，防止重复点击和用户误操作
+                            showDopamineLoading("正在查询 $selectedSem 的课表...")
                             updateStatus("正在查询 $selectedSem 的课表...")
-                            step5SetSemContext(selectedSem) // 调用你的查询函数
+                            step5SetSemContext(selectedSem)
                         } else {
-                            Toast.makeText(this, "未选择有效学期", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this@MainActivity, "未选择有效学期", Toast.LENGTH_SHORT).show()
                         }
                     } catch (e: Exception) {
-                        Log.e("QueryError", "选择学期时发生错误: ${e.message}")
-                        Toast.makeText(this, "查询启动失败，请重试", Toast.LENGTH_SHORT).show()
+                        Log.e("QueryError", "选择学期时发生错误: ${e.message}", e)
+                        Toast.makeText(this@MainActivity, "查询启动失败，请重试", Toast.LENGTH_SHORT).show()
                     }
                 }
                 .setNegativeButton("取消", null)
                 .show()
         } catch (e: Exception) {
-            Log.e("DialogError", "显示查询弹窗失败: ${e.message}")
+            Log.e("DialogError", "显示查询弹窗失败: ${e.message}", e)
             Toast.makeText(this, "无法打开查询窗口", Toast.LENGTH_SHORT).show()
         }
     }
@@ -1360,11 +1375,27 @@ class MainActivity : AppCompatActivity() {
                         val kbReq = Request.Builder().url(kbUrl).addHeader("Referer", setUrl).build()
                         myClient.newCall(kbReq).enqueue(object : Callback {
                             override fun onResponse(call: Call, response: Response) {
-                                val decodedHtml = decodeGb2312(response)
-                                runOnUiThread {
-                                    hideDopamineLoading()
-                                    if (!isFinishing && !isDestroyed) {
-                                        parseFinalKb(decodedHtml)
+                                try {
+                                    val decodedHtml = decodeGb2312(response)
+                                    // 前置检测：如果响应是登录页，说明 Session 已失效
+                                    if (decodedHtml.contains("欢迎") && decodedHtml.contains("index1.asp") && !decodedHtml.contains("课表")) {
+                                        runOnUiThread {
+                                            hideDopamineLoading()
+                                            updateStatus("登录已过期，请重新登录")
+                                        }
+                                        return
+                                    }
+                                    runOnUiThread {
+                                        hideDopamineLoading()
+                                        if (!isFinishing && !isDestroyed) {
+                                            parseFinalKb(decodedHtml)
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("QueryError", "解析响应时发生错误: ${e.message}", e)
+                                    runOnUiThread {
+                                        hideDopamineLoading()
+                                        updateStatus("数据解析失败，请重试")
                                     }
                                 }
                             }
@@ -1568,12 +1599,32 @@ class MainActivity : AppCompatActivity() {
 
     private fun parseFinalKb(html: String) {
         try {
+            // 前置校验：检测 Session 是否过期导致返回了登录页而非课表页
+            if (html.contains("欢迎") && html.contains("index1.asp") && !html.contains("课表")) {
+                Log.e("ParseError", "Session已过期，服务器返回登录页而非课表")
+                updateStatus("登录已过期，请重新登录")
+                return
+            }
+            if (!html.contains("td") && !html.contains("TD")) {
+                Log.e("ParseError", "HTML不含表格数据，可能被重定向")
+                updateStatus("未获取到课表数据，请检查网络")
+                return
+            }
+
             val myDoc = Jsoup.parse(html)
-            val detailTable = myDoc.select("table").lastOrNull() ?: run {
+            val detailTable = myDoc.select("table").lastOrNull()
+            if (detailTable == null) {
+                Log.e("ParseError", "HTML中未找到任何table元素")
                 updateStatus("未找到课表数据表格")
                 return
             }
             val rows = detailTable.select("tr")
+            if (rows.size < 2) {
+                Log.e("ParseError", "课表行数不足 (${rows.size})")
+                updateStatus("课表数据为空，请检查网络")
+                return
+            }
+
             val rawList = mutableListOf<Course>()
             val regex = """(\d)-(\d+),(\d+)-(\d+)(\(.*\))?""".toRegex()
 
@@ -1582,7 +1633,7 @@ class MainActivity : AppCompatActivity() {
                 if (tds.size < 12) continue
 
                 val name = tds[1].text().trim()
-                val rangeWeek = tds[3].text().trim() // 原始周次如 "1-16"
+                val rangeWeek = tds[3].text().trim()
                 val roomList = tds[4].html().split("<br>").map { Jsoup.parse(it).text().trim() }.filter { it.isNotEmpty() }
                 val timeParts = tds[5].html().split("<br>").map { Jsoup.parse(it).text().trim() }.filter { it.isNotEmpty() }
                 val teacherRaw = tds[11].text().trim()
@@ -1598,13 +1649,24 @@ class MainActivity : AppCompatActivity() {
                             val d = match.groupValues[1].toInt()
                             val s = match.groupValues[2].toInt()
                             val e = match.groupValues[4].toInt()
-                            val suffix = match.groupValues[5] // 拿到 "(单)" 之类的
+                            val suffix = match.groupValues[5]
+
+                            // 数据合法性校验：防止脏数据导致 GridLayout 渲染崩溃
+                            if (d !in 1..7) continue
+                            if (s !in 1..10 || e !in 1..10) continue
+                            if (s > e) continue
 
                             val myWeekList = convertWeeksToList(rangeWeek, suffix)
                             rawList.add(Course(name, teacher, currentRoom, d, s, e, myWeekList))
                         }
                     }
                 }
+            }
+
+            if (rawList.isEmpty()) {
+                Log.e("ParseError", "未解析到任何合法课程，原始行数: ${rows.size}")
+                updateStatus("课表解析为空，数据格式可能已变更")
+                return
             }
 
             rawList.sortWith(compareBy({ it.day }, { it.startSection }))
@@ -1621,15 +1683,14 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            runOnUiThread {
-                fetchedList.clear()
-                fetchedList.addAll(mergedList)
-                saveCoursesToLocal(fetchedList)
-                viewPager.adapter?.notifyDataSetChanged()
-                updateStatus("✅ 课表同步成功")
-            }
+            // 直接在当前线程更新（本函数已在 UI 线程调用），移除冗余的嵌套 runOnUiThread
+            fetchedList.clear()
+            fetchedList.addAll(mergedList)
+            saveCoursesToLocal(fetchedList)
+            viewPager.adapter?.notifyDataSetChanged()
+            updateStatus("✅ 课表同步成功")
         } catch (e: Exception) {
-            Log.e("ParseError", "解析课表时崩溃: ${e.message}")
+            Log.e("ParseError", "解析课表时崩溃: ${e.message}", e)
             updateStatus("课表内容解析失败")
         }
     }
@@ -2356,8 +2417,10 @@ class MainActivity : AppCompatActivity() {
     // 💡 替换原有的 updateStatus
     private fun updateStatus(s: String) {
         runOnUiThread {
-            // 1. 只有“成功”、“失败”、“错误”这种对用户有用的结论，才用 Toast 弹窗提示
-            if (s.contains("成功") || s.contains("失败") || s.contains("错误") || s.contains("故障")) {
+            // 1. 只有对用户有实际意义的结论才用 Toast 弹窗提示
+            if (s.contains("成功") || s.contains("失败") || s.contains("错误") || s.contains("故障")
+                || s.contains("过期") || s.contains("为空") || s.contains("未获取") || s.contains("请重试")
+            ) {
                 Toast.makeText(this@MainActivity, s, Toast.LENGTH_SHORT).show()
             }
             // 2. 像“正在拉取”、“解析中”这种废话，直接打进 Logcat，只有你自己插电脑上调试时才看得到
